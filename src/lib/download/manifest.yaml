@@ -1,0 +1,40 @@
+# 下载器配置 - aria2 + hf_hub
+# 公开技术参数，可安全提交到 Git
+# API 密钥请配置在 secrets.yaml 中
+
+# ===========================================
+# aria2 多线程下载配置
+# ===========================================
+aria2:
+  # 并发连接数 (AutoDL 高带宽建议 32)
+  connections: 32
+  # 分片大小 (MB)，小分片可更快启动并行
+  split_size: 5
+  # 最大重试次数
+  max_retries: 5
+  # 超时时间 (秒)，快速失败重试
+  timeout: 30
+  # 磁盘缓存 (MB)，减少磁盘 IO
+  disk_cache: 64
+  # 文件预分配方式: none/falloc/prealloc
+  # none: 不预分配，启动最快
+  # falloc: 快速预分配(ext4/xfs)，推荐 SSD
+  file_allocation: none
+
+# ===========================================
+# hf_hub 配置 (HuggingFace 官方下载，自动利用 Xet 加速)
+# ===========================================
+hf_hub:
+  enabled: true
+  # 开启 Xet 高性能模式 (替代原 hf_transfer，榨干带宽和 CPU)
+  xet_high_performance: true
+  # Xet Chunk Cache 大小 (MB)
+  # - 设为 0: 禁用 (hf_xet 1.2.0+ 默认行为，一次性大模型下载更快)
+  # - 设为 10240+: 启用 10GB chunk 缓存 (频繁更新同一仓库时推荐，可利用分块去重)
+  xet_chunk_cache_mb: 0
+  # 是否为机械硬盘优化 (顺序写入，SSD 无需开启)
+  xet_write_sequentially: false
+  # ETag 检查超时 (秒)，低值可加速已缓存文件的检查
+  etag_timeout: 10
+  # Xet 并发获取数 (高带宽场景可调高，默认 16)
+  xet_concurrent_gets: 16

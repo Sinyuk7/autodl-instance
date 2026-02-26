@@ -1,0 +1,17 @@
+# Torch 算力引擎配置
+# NVIDIA 驱动与 CUDA 版本基线约束 + PyTorch 安装源
+
+# NVIDIA 驱动最低版本要求 (主版本号)
+min_driver_version: 580
+
+# CUDA 最低版本要求 (用于幂等性检查)
+min_cuda_version: 13.0
+
+# PyTorch 下载源 (nightly + CUDA 13.0)
+index_url: "https://download.pytorch.org/whl/nightly/cu130"
+
+# 需要安装的算力包
+packages:
+  - "torch"
+  - "torchvision"
+  - "torchaudio"

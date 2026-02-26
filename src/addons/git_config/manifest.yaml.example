@@ -1,0 +1,22 @@
+# Git 配置示例 - 用户身份与 SSH 密钥
+# ================================================
+# 使用方法:
+#   1. 复制此文件: cp manifest.yaml.example manifest.yaml
+#   2. 编辑配置:   vim manifest.yaml
+# ================================================
+# manifest.yaml 已被 .gitignore 忽略，不会提交到版本库
+# 所有配置均为可选，未配置的功能会自动跳过
+
+# Git 用户名，例如: YourName
+user_name: ""
+
+# Git 邮箱，例如: your.email@example.com
+user_email: ""
+
+# SSH 密钥配置 (可选 - 用于 GitHub 免密推送)
+# 若不配置，首次运行会自动生成新密钥
+# Base64 编码的私钥 (使用: base64 -w0 ~/.ssh/id_ed25519)
+ssh_private_key: ""
+
+# 公钥内容 (可选，若提供私钥可自动提取)
+ssh_public_key: ""

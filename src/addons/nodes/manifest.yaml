@@ -1,0 +1,19 @@
+# 自定义节点列表 - 使用 git 仓库地址直接安装
+# 格式: git 仓库 URL (会 clone 到 custom_nodes 目录)
+# 注：ComfyUI-Manager 已由 ComfyAddon 底层引擎默认安装
+
+default_nodes:
+  - name: "ComfyUI-Easy-Use"
+    git: "https://github.com/yolain/ComfyUI-Easy-Use.git"
+  
+  - name: "cg-use-everywhere"
+    git: "https://github.com/chrisgoringe/cg-use-everywhere.git"
+  
+  - name: "sd-ppp"
+    git: "https://github.com/zombieyang/sd-ppp.git"
+  
+  - name: "rgthree-comfy"
+    git: "https://github.com/rgthree/rgthree-comfy.git"
+  
+  - name: "ComfyUI-TeaCache"
+    git: "https://github.com/welltop-cn/ComfyUI-TeaCache.git"

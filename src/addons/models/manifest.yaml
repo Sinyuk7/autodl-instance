@@ -1,0 +1,40 @@
+# 模型预设配置
+# 每个预设代表一个完整工作流所需的模型组合
+# 格式兼容 comfy-lock.yaml 的 models 部分
+
+presets:
+  # ============================================================
+  # FLUX.2 系列
+  # ============================================================
+  FLUX.2-klein-9B:
+    description: "FLUX.2 Klein 9B"
+    models:
+      - model: "flux-2-klein-9b"
+        url: "https://huggingface.co/black-forest-labs/FLUX.2-klein-9B/resolve/main/flux-2-klein-9b.safetensors"
+        paths:
+          - path: "unet/flux-2-klein-9b.safetensors"
+        type: "unet"
+        
+      - model: "flux2-vae"
+        url: "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors"
+        paths:
+          - path: "vae/flux2-ae.safetensors"
+        type: "vae"
+        
+      - model: "qwen-clip-fp8"
+        url: "https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-9b/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors"
+        paths:
+          - path: "clip/qwen_3_8b_fp8mixed.safetensors"
+        type: "clip"
+
+  # ============================================================
+  # 示例: 更多预设可在此添加
+  # ============================================================
+  # SD3-Medium:
+  #   description: "Stable Diffusion 3 Medium"
+  #   models:
+  #     - model: "sd3-medium"
+  #       url: "https://huggingface.co/stabilityai/stable-diffusion-3-medium/..."
+  #       paths:
+  #         - path: "checkpoints/sd3-medium.safetensors"
+  #       type: "checkpoint"

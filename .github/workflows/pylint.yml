@@ -1,0 +1,50 @@
+name: Pylint
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # 匹配 AutoDL 常用的 Ubuntu 环境
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        # 开启 pip 缓存，避免每次都重新下载 requirements.txt 里的包
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # 安装项目依赖，防止 Pylint 报 import-error
+        pip install -r requirements.txt
+        # 安装 pylint
+        pip install pylint
+        
+    - name: Analysing the code with pylint
+      run: |
+        pylint src/ \
+          --fail-under=7.5 \
+          --disable=C0303,C0304,C0301 \
+          --disable=C0114,C0115,C0116 \
+          --disable=C0411,C0413,C0415 \
+          --disable=R0902,R0912,R1705,R1732 \
+          --disable=W0603,W0107,W1309,W2301 \
+          --disable=C0325,C0103

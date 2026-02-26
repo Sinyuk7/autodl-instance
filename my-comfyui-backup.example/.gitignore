@@ -1,0 +1,21 @@
+# ComfyUI 运行时生成的数据库（每个实例独立）
+user/comfyui.db
+
+# ComfyUI Manager 缓存和快照
+user/__manager/cache/
+
+# Python 缓存
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# 系统文件
+**/.DS_Store
+**/Thumbs.db
+
+# 日志文件
+**/*.log
+
+# 临时文件
+**/*.tmp
+**/*.bak
