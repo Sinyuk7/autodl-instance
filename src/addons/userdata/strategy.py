@@ -39,8 +39,9 @@ class LocalStrategy(SyncStrategy):
         self.example_dir = example_dir
     
     def prepare(self, data_dir: Path, context: Context) -> bool:
+        logger.info(f"  -> 模式: 本地存储 (未配置 userdata_repo)")
         if data_dir.exists():
-            logger.debug(f"  -> 数据目录已存在")
+            logger.info(f"  -> 数据目录已存在，跳过初始化")
             return True
         
         if not self.example_dir.exists():
@@ -93,6 +94,8 @@ class GitRepoStrategy(SyncStrategy):
         return f"Auto sync from {hostname} by {username} at {timestamp}"
 
     def prepare(self, data_dir: Path, context: Context) -> bool:
+        logger.info(f"  -> 模式: Git 仓库同步")
+        
         # 已存在且是 Git 仓库 → pull
         if data_dir.exists() and self._is_git_repo(data_dir):
             # 检查是否有未完成的 rebase，先中止

@@ -18,4 +18,4 @@ sync_dirs:
 # 用于备份工作流、模型记录、节点配置等用户数据
 # 若不配置，数据仅保存在本地 my-comfyui-backup 目录
 # 支持 SSH 格式: git@github.com:username/my-comfyui-backup.git
-userdata_repo: ""
+userdata_repo: "git@github.com:Sinyuk7/my-comfyui-backup.git"
