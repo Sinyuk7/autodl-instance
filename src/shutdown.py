@@ -7,9 +7,10 @@ AutoDL 关机同步脚本
   - 通过 bye 命令: bye (需先执行 setup 生成 bin/ 脚本)
 """
 import argparse
+from pathlib import Path
 
-from src.main import create_context, execute
-from src.core.utils import logger
+from src.main import create_context, execute, BASE_DIR
+from src.core.utils import logger, setup_logger
 from src.lib.network import setup_network
 
 
@@ -17,6 +18,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AutoDL 关机同步")
     parser.add_argument("--debug", action="store_true", help="输出调试信息")
     args = parser.parse_args()
+
+    # 初始化日志（必须在所有 logger 调用之前）
+    log_file = BASE_DIR / "autodl-setup.log"
+    setup_logger(log_file)
 
     # 初始化网络环境（sync 可能需要 git push 等网络操作）
     setup_network()
