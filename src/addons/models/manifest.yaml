@@ -14,17 +14,41 @@ presets:
         paths:
           - path: "unet/flux-2-klein-9b.safetensors"
         type: "unet"
-        
+
       - model: "flux2-vae"
         url: "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors"
         paths:
           - path: "vae/flux2-ae.safetensors"
         type: "vae"
-        
+
       - model: "qwen-clip-fp8"
         url: "https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-9b/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors"
         paths:
           - path: "clip/qwen_3_8b_fp8mixed.safetensors"
+        type: "clip"
+
+  # ============================================================
+  # Z-Image 系列
+  # ============================================================
+  Z-Image-Base:
+    description: "Z-Image Base 6B (Tongyi-MAI)"
+    models:
+      - model: "z-image-base-bf16"
+        url: "https://huggingface.co/Comfy-Org/z_image/resolve/main/split_files/diffusion_models/z_image_base_bf16.safetensors"
+        paths:
+          - path: "unet/z_image_base_bf16.safetensors"
+        type: "unet"
+
+      - model: "z-image-vae"
+        url: "https://huggingface.co/Comfy-Org/z_image/resolve/main/split_files/vae/ae.safetensors"
+        paths:
+          - path: "vae/z_image_ae.safetensors" # 已在此处重命名以防止冲突
+        type: "vae"
+
+      - model: "qwen-3-4b-clip"
+        url: "https://huggingface.co/Comfy-Org/z_image/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors"
+        paths:
+          - path: "clip/qwen_3_4b.safetensors"
         type: "clip"
 
   # ============================================================
