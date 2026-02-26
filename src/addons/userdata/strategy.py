@@ -93,6 +93,11 @@ class GitRepoStrategy(SyncStrategy):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return f"Auto sync from {hostname} by {username} at {timestamp}"
 
+    def _has_local_changes(self, path: Path) -> bool:
+        """检查是否有未提交的本地修改"""
+        ok, status = self._run_git(["status", "--porcelain"], path)
+        return ok and bool(status.strip())
+
     def prepare(self, data_dir: Path, context: Context) -> bool:
         logger.info(f"  -> 模式: Git 仓库同步")
         
@@ -103,8 +108,22 @@ class GitRepoStrategy(SyncStrategy):
                 logger.warning(f"  -> 检测到未完成的 rebase，正在中止...")
                 self._run_git(["rebase", "--abort"], data_dir)
             
+            # 检查本地修改，先 stash
+            has_changes = self._has_local_changes(data_dir)
+            if has_changes:
+                logger.info(f"  -> 暂存本地修改...")
+                self._run_git(["stash", "push", "-m", "auto-stash before pull"], data_dir)
+            
             logger.info(f"  -> 拉取最新数据...")
             ok, msg = self._run_git(["pull", "--rebase"], data_dir)
+            
+            # 恢复 stash
+            if has_changes:
+                logger.info(f"  -> 恢复本地修改...")
+                pop_ok, pop_msg = self._run_git(["stash", "pop"], data_dir)
+                if not pop_ok:
+                    logger.warning(f"  -> stash pop 冲突，本地修改保留在 stash 中: {pop_msg}")
+            
             if not ok:
                 logger.warning(f"  -> Git pull 失败: {msg}，尝试恢复干净状态...")
                 # rebase 失败时中止，恢复到干净状态
