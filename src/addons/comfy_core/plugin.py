@@ -111,4 +111,13 @@ class ComfyAddon(BaseAddon):
 
     @hookimpl
     def sync(self, context: AppContext) -> None:
-        pass
+        """sync 阶段也需要初始化 artifacts，供其他插件使用"""
+        ctx = context
+        comfy_dir = self._get_comfy_dir(ctx)
+        
+        # 产出：供后续插件使用（sync 是逆序执行，comfy_core 最后执行）
+        # 但其他插件可能在 comfy_core 之前就需要这些路径
+        if not ctx.artifacts.comfy_dir:
+            ctx.artifacts.comfy_dir = comfy_dir
+            ctx.artifacts.custom_nodes_dir = comfy_dir / "custom_nodes"
+            ctx.artifacts.user_dir = comfy_dir / "user"

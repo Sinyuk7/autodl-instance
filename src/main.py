@@ -105,6 +105,23 @@ def create_context(debug: bool = False) -> AppContext:
     )
 
 
+def _prefill_artifacts(context: AppContext) -> None:
+    """
+    预填充基础 artifacts。
+    
+    在 sync/start 阶段，某些插件需要访问其他插件在 setup 阶段产出的路径，
+    但由于 sync 是逆序执行的，需要提前填充这些基础路径。
+    """
+    ctx = context
+    
+    # ComfyUI 基础路径
+    comfy_dir = ctx.base_dir / "ComfyUI"
+    if comfy_dir.exists():
+        ctx.artifacts.comfy_dir = comfy_dir
+        ctx.artifacts.custom_nodes_dir = comfy_dir / "custom_nodes"
+        ctx.artifacts.user_dir = comfy_dir / "user"
+
+
 def execute(
     action: str, 
     context: AppContext, 
@@ -121,6 +138,10 @@ def execute(
         only: 只执行指定插件（跳过依赖，危险模式）
     """
     pipeline = create_pipeline()
+    
+    # sync/start 动作需要预填充 artifacts
+    if action in ("sync", "start"):
+        _prefill_artifacts(context)
     
     # sync 动作逆序执行
     if action == "sync":

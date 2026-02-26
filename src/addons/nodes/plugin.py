@@ -209,6 +209,11 @@ class NodesAddon(BaseAddon):
         
         comfy_dir = ctx.artifacts.comfy_dir
         if not comfy_dir:
+            logger.warning("  -> [SKIP] ComfyUI 目录未设置，跳过快照保存")
+            return
+        
+        if not comfy_dir.exists():
+            logger.warning(f"  -> [SKIP] ComfyUI 目录不存在: {comfy_dir}")
             return
         
         try:
@@ -221,5 +226,7 @@ class NodesAddon(BaseAddon):
             if latest:
                 logger.info(f"  -> 快照已保存: {latest.name}")
                 self._cleanup_old_snapshots(ctx, keep=1)
+            else:
+                logger.warning("  -> [WARN] 快照命令执行成功，但未找到快照文件")
         except Exception as e:
             logger.error(f"  -> 快照保存失败: {e}")
