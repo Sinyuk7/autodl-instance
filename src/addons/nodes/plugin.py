@@ -1,6 +1,7 @@
 """
 ComfyUI 自定义节点管理插件
 """
+import configparser
 import sys
 from pathlib import Path
 from typing import List, cast
@@ -13,6 +14,14 @@ from src.core.utils import logger
 class NodesAddon(BaseAddon):
     module_dir = "nodes"
     SNAPSHOT_PATTERN = "*_snapshot.json"
+    CACHE_INDICATOR_FILE = "881334633_nodes.json"  # /nodes 接口的缓存文件
+
+    def _get_manager_dir(self, ctx: AppContext) -> Path:
+        """Manager 目录：ComfyUI/user/__manager/"""
+        user_dir = ctx.artifacts.user_dir
+        if not user_dir:
+            raise RuntimeError("nodes 插件需要 comfy_core 先执行")
+        return user_dir / "__manager"
 
     def _get_snapshots_dir(self, ctx: AppContext) -> Path:
         """快照目录：ComfyUI/user/__manager/snapshots/"""
@@ -39,6 +48,45 @@ class NodesAddon(BaseAddon):
         for old in snapshots[:-keep] if keep > 0 else snapshots:
             old.unlink()
             logger.info(f"  -> 已清理: {old.name}")
+
+    def _has_cnr_cache(self, ctx: AppContext) -> bool:
+        """检查是否有 ComfyRegistry 缓存"""
+        cache_dir = self._get_manager_dir(ctx) / "cache"
+        cache_file = cache_dir / self.CACHE_INDICATOR_FILE
+        return cache_file.exists() and cache_file.stat().st_size > 0
+
+    def _ensure_offline_mode(self, ctx: AppContext) -> bool:
+        """确保 config.ini 中 network_mode 不是 public，避免联网卡住
+        
+        Returns:
+            bool: 是否修改了配置
+        """
+        config_path = self._get_manager_dir(ctx) / "config.ini"
+        if not config_path.exists():
+            return False
+        
+        config = configparser.ConfigParser()
+        config.read(config_path)
+        
+        current_mode = config.get("default", "network_mode", fallback="public")
+        if current_mode == "public":
+            config.set("default", "network_mode", "local")
+            with open(config_path, "w") as f:
+                config.write(f)
+            return True
+        return False
+
+    def _restore_network_mode(self, ctx: AppContext, original_mode: str = "public") -> None:
+        """恢复 network_mode 配置"""
+        config_path = self._get_manager_dir(ctx) / "config.ini"
+        if not config_path.exists():
+            return
+        
+        config = configparser.ConfigParser()
+        config.read(config_path)
+        config.set("default", "network_mode", original_mode)
+        with open(config_path, "w") as f:
+            config.write(f)
 
     def _install_node_dependencies(self, ctx: AppContext) -> None:
         """遍历所有 custom_nodes，安装缺失的 Python 依赖"""
@@ -91,6 +139,13 @@ class NodesAddon(BaseAddon):
             logger.info(f"  -> 检测到快照: {latest.name}")
             ctx.artifacts.latest_snapshot = latest
             
+            # 检查缓存，无缓存时切换到 offline 模式避免联网卡住
+            force_offline = False
+            if not self._has_cnr_cache(ctx):
+                logger.warning("  -> [WARN] 未检测到 ComfyRegistry 缓存，切换到离线模式")
+                logger.warning("  -> [WARN] CNR 节点将被跳过，仅恢复 git 节点")
+                force_offline = self._ensure_offline_mode(ctx)
+            
             try:
                 ctx.cmd.run([
                     "comfy", "--workspace", str(comfy_dir),
@@ -102,6 +157,10 @@ class NodesAddon(BaseAddon):
                 return
             except Exception as e:
                 logger.warning(f"  -> 快照恢复失败: {e}，尝试全新安装...")
+            finally:
+                # 恢复原始网络模式
+                if force_offline:
+                    self._restore_network_mode(ctx, "public")
         
         # 2. 全新安装（从 manifest）
         logger.info("  -> 执行基于 manifest 的全新安装...")
