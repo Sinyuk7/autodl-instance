@@ -26,16 +26,7 @@ git clone https://github.com/Sinyuk7/autodl-instance.git
 cd autodl-instance
 ```
 
-### 2. 配置用户信息（可选但推荐）
-
-```bash
-cp env.yaml.example env.yaml
-vim env.yaml
-```
-
-配置内容包括 Git 用户名/邮箱、SSH 密钥（用于免密推送）、HuggingFace 和 CivitAI 的 API Token。
-
-### 3. 一键初始化环境
+### 2. 一键初始化环境
 
 ```bash
 chmod +x init.sh
@@ -53,13 +44,13 @@ chmod +x init.sh
 
 > 💡 **省钱技巧**：可以在「无卡模式」下完成初始化，下载完成后关机，再以有卡模式启动服务。
 
-### 4. 启动 ComfyUI 服务
+### 3. 启动 ComfyUI 服务
 
 ```bash
 start
 ```
 
-### 5. 关机前同步
+### 4. 关机前同步
 
 ```bash
 bye
@@ -69,7 +60,7 @@ bye
 
 ---
 
-### 快捷命令
+## ⌨️ 快捷命令
 
 `./init.sh` 完成后，以下全局命令可直接在终端使用：
 
@@ -80,63 +71,50 @@ bye
 | `model` | 模型下载管理 |
 | `turbo` | 启用 AutoDL 学术加速（加速 GitHub/HuggingFace） |
 
-## ⚙️ 配置说明
+## ⚙️ 可选配置
 
-### 用户配置 (`env.yaml`)
+所有配置均为**可选**，未配置的功能会自动跳过。配置文件分散在各模块目录下：
 
-```yaml
-# Git 配置（用于免密推送）
-git:
-  user_name: "YourName"
-  user_email: "your.email@example.com"
-  ssh_private_key: ""   # Base64 编码的私钥（可选）
-  ssh_public_key: ""    # 公钥内容（可选）
+### Git 免密推送
 
-# 数据同步配置（可选 - 启用数据漫游）
-sync:
-  # 私有数据仓库，用于备份工作流、模型记录、节点配置
-  # 若不配置，数据仅保存在本地
-  userdata_repo: "git@github.com:username/my-comfyui-backup.git"
-
-# API Keys
-api_keys:
-  hf_api_token: "hf_xxxxxxxxxxxx"        # HuggingFace Token
-  civitai_api_token: "xxxxxxxxxxxxxxxx"  # CivitAI API Token
+```bash
+cd src/addons/git_config
+cp manifest.yaml.example manifest.yaml
+vim manifest.yaml
 ```
+
+配置 `user_name`、`user_email`、SSH 密钥后，可启用私有仓库的免密推送。
+
+### API Token（模型下载加速）
+
+```bash
+cd src/lib/download
+cp secrets.yaml.example secrets.yaml
+vim secrets.yaml
+```
+
+配置 HuggingFace / CivitAI 的 API Token，解锁需要登录的模型下载。
 
 ### 数据漫游（跨实例同步）
 
-配置 `sync.userdata_repo` 后，你的用户数据将自动同步到私有 Git 仓库：
+编辑 `src/addons/userdata/manifest.yaml`，配置 `userdata_repo` 为你的私有 Git 仓库地址：
+
+```yaml
+userdata_repo: "git@github.com:username/my-comfyui-backup.git"
+```
+
+配置后，你的用户数据将自动同步：
 
 | 数据类型 | 说明 |
 |---------|------|
 | 工作流 | ComfyUI 保存的 `.json` 工作流文件 |
 | 节点快照 | ComfyUI-Manager 生成的节点状态快照 |
-| 模型记录 | 已下载模型的清单（`model_lock.yaml`） |
+| 模型记录 | 已下载模型的清单 |
 | 用户配置 | ComfyUI 设置、节点偏好等 |
-
-**工作流程：**
-- `init` 时自动从私有仓库拉取最新数据
-- `bye` 时自动将变更推送到私有仓库
-- 新开实例时，配置相同的 `userdata_repo` 即可无缝恢复
 
 > 如果不配置私有仓库，数据会保存在本地 `my-comfyui-backup` 目录，不影响正常使用。
 
-### 网络与镜像配置
-
-默认 `setup` 时会自动启用 AutoDL 学术加速，加速 GitHub / HuggingFace 等资源。
-
-如果学术加速不稳定，可在 `src/addons/system/manifest.yaml` 中配置镜像：
-
-```yaml
-mirrors:
-  pypi: "https://mirrors.aliyun.com/pypi/simple/"
-  huggingface: "https://hf-mirror.com"
-```
-
 ## 📥 模型下载
-
-`setup` 完成后，可直接使用全局 `model` 命令管理模型。
 
 ### 交互式下载
 
@@ -209,16 +187,7 @@ rm -f /tmp/uv-*.lock
 
 **解决**：复制提示中的公钥，访问 https://github.com/settings/keys 添加。
 
-> 更好的方式：在 `env.yaml` 中配置本地已有的 SSH 密钥，避免每次新建实例都要重新添加。
-
-### 4. ModuleNotFoundError: No module named 'src'
-
-必须以模块方式运行：
-
-```bash
-python -m src.main setup  # ✅ 正确
-python src/main.py setup  # ❌ 错误
-```
+> 更好的方式：在 `src/addons/git_config/manifest.yaml` 中配置本地已有的 SSH 密钥，避免每次新建实例都要重新添加。
 
 ## 👨‍💻 开发者
 
