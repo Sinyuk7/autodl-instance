@@ -167,8 +167,11 @@ def execute(
     
     # setup 完成后持久化 artifacts，供后续 start/sync 使用
     if action == "setup":
-        context.artifacts.save(context.project_root)
-        logger.debug("  -> Artifacts 已持久化")
+        try:
+            context.artifacts.save(context.project_root)
+            logger.info("  -> Artifacts 已持久化")
+        except Exception as e:
+            logger.error(f"  -> Artifacts 持久化失败: {e}")
 
 
 def main() -> None:
