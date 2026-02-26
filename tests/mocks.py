@@ -56,7 +56,7 @@ class MockRunner(ICommandRunner):
         self.calls.append(CallRecord(
             cmd=cmd_str,
             cwd=cwd,
-            kwargs={"timeout": timeout, "check": check, "shell": shell},
+            kwargs={"timeout": timeout, "check": check, "shell": shell, "capture_output": capture_output},
         ))
         
         stub = self._find_stub(cmd_str)
