@@ -1,10 +1,9 @@
 name: Pylint
 
 on:
-  push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+  schedule:
+    # 每天北京时间凌晨 4 点运行 (UTC 时间 20:00)
+    - cron: '0 20 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
