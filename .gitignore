@@ -88,6 +88,9 @@ env.yaml
 src/addons/git_config/manifest.yaml
 src/lib/download/secrets.yaml
 
+# 运行时状态 (跨进程共享的 artifacts)
+.artifacts.json
+
 # dotenv (已废弃，保留兼容)
 .env
 

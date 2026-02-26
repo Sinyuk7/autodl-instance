@@ -90,16 +90,28 @@ def load_manifests(project_root: Path) -> Dict[str, Dict[str, Any]]:
     return manifests
 
 
-def create_context(debug: bool = False) -> AppContext:
-    """创建应用上下文"""
+def create_context(debug: bool = False, load_artifacts: bool = False) -> AppContext:
+    """
+    创建应用上下文
+    
+    Args:
+        debug: 调试模式
+        load_artifacts: 是否从持久化文件加载 artifacts（用于 start/sync 阶段）
+    """
     project_root = Path(__file__).resolve().parent.parent
+    
+    # 根据场景决定是否加载已持久化的 artifacts
+    if load_artifacts:
+        artifacts = Artifacts.load(project_root)
+    else:
+        artifacts = Artifacts()
     
     return AppContext(
         project_root=project_root,
         base_dir=BASE_DIR,
         cmd=SubprocessRunner(),
         state=FileStateManager(BASE_DIR),
-        artifacts=Artifacts(),
+        artifacts=artifacts,
         debug=debug,
         addon_manifests=load_manifests(project_root),
     )
@@ -152,6 +164,11 @@ def execute(
         if until and addon.name == until:
             logger.info(f"  -> 已到达目标插件 [{until}]，停止")
             break
+    
+    # setup 完成后持久化 artifacts，供后续 start/sync 使用
+    if action == "setup":
+        context.artifacts.save(context.project_root)
+        logger.debug("  -> Artifacts 已持久化")
 
 
 def main() -> None:
@@ -173,7 +190,9 @@ def main() -> None:
     setup_network()
 
     # 创建上下文并执行
-    context = create_context(debug=args.debug)
+    # start/sync 需要加载 setup 阶段持久化的 artifacts
+    load_artifacts = args.action in ("start", "sync")
+    context = create_context(debug=args.debug, load_artifacts=load_artifacts)
     execute(args.action, context, until=args.until, only=args.only)
 
 

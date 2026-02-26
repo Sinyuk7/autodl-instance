@@ -30,7 +30,8 @@ def main() -> None:
     logger.info(">>> AutoDL 关机同步 - 开始执行环境快照...")
     logger.info("=" * 50)
     
-    context = create_context(debug=args.debug)
+    # sync 需要加载 setup 阶段持久化的 artifacts
+    context = create_context(debug=args.debug, load_artifacts=True)
     
     # 执行 sync 动作 (execute 内部会自动逆序执行)
     execute("sync", context)
