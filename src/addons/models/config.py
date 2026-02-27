@@ -31,17 +31,30 @@ def get_extra_paths_config() -> Dict[str, Any]:
     return {}
 
 
-def get_models_base(fallback: Optional[Path] = None) -> Optional[Path]:
-    """从 extra_model_paths.yaml 获取模型根目录。
+# 与 main.py 保持一致的基础目录
+_BASE_DIR = Path("/root/autodl-tmp")
+_SHARED_MODELS_DIR = "shared_models"
 
-    优先读取 extra_model_paths.yaml 中的 base_path，
-    未配置时返回 fallback（默认为 None，调用方需自行处理）。
+
+def get_models_base(fallback: Optional[Path] = None) -> Path:
+    """获取模型根目录。
+
+    优先读取环境变量 COMFYUI_MODELS_DIR，
+    否则使用 /root/autodl-tmp/shared_models 目录。
+    
+    注意: extra_model_paths.yaml 是模板文件，含占位符 __BASE_PATH__，
+    不能直接读取其 base_path 值。实际路径由 plugin.py 在运行时渲染。
     """
-    section = get_extra_paths_config()
-    base_path = section.get("base_path", "")
-    if isinstance(base_path, str) and base_path:
-        return Path(base_path)
-    return fallback
+    import os
+    
+    # 1. 优先使用环境变量
+    env_path = os.environ.get("COMFYUI_MODELS_DIR")
+    if env_path:
+        return Path(env_path)
+    
+    # 2. 默认使用 /root/autodl-tmp/shared_models (与 main.py BASE_DIR 一致)
+    default_path = _BASE_DIR / _SHARED_MODELS_DIR
+    return default_path
 
 
 def get_type_dir_mapping() -> Dict[str, str]:
