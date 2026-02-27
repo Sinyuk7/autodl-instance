@@ -1,60 +1,15 @@
 """
 下载策略测试
 
-覆盖核心场景：HF/Aria2 策略的可用性检测、缓存管理
+覆盖核心场景：Aria2 策略的可用性检测、缓存管理
 """
 import pytest
 import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from src.lib.download.hf_hub import HuggingFaceHubStrategy
 from src.lib.download.aria2 import Aria2Strategy
-from src.lib.download.base import CacheEntry, PurgeResult
-
-
-class TestHuggingFaceHubStrategy:
-    """HuggingFace Hub 策略测试"""
-    
-    def test_name_property(self):
-        """策略名称正确"""
-        strategy = HuggingFaceHubStrategy()
-        assert strategy.name == "hf_hub"
-    
-    def test_is_available_when_enabled_and_installed(self):
-        """已安装 huggingface_hub 且启用时可用"""
-        strategy = HuggingFaceHubStrategy()
-        strategy._enabled = True
-        
-        with patch.dict('sys.modules', {'huggingface_hub': MagicMock()}):
-            assert strategy.is_available() is True
-    
-    def test_is_available_when_disabled(self):
-        """禁用时不可用"""
-        strategy = HuggingFaceHubStrategy()
-        strategy._enabled = False
-        assert strategy.is_available() is False
-    
-    def test_cache_info_returns_correct_structure(self):
-        """cache_info 返回正确结构"""
-        strategy = HuggingFaceHubStrategy()
-        entries = strategy.cache_info()
-        
-        assert isinstance(entries, list)
-        assert len(entries) == 3  # Hub, Download, Xet
-        
-        for entry in entries:
-            assert isinstance(entry, CacheEntry)
-            assert hasattr(entry, 'name')
-            assert hasattr(entry, 'path')
-            assert hasattr(entry, 'size_bytes')
-            assert hasattr(entry, 'exists')
-    
-    def test_purge_model_cache_not_exist(self):
-        """清理不存在的模型缓存返回 None"""
-        strategy = HuggingFaceHubStrategy()
-        result = strategy.purge_model_cache("non-existent/repo")
-        assert result is None
+from src.lib.download.base import CacheEntry
 
 
 class TestAria2Strategy:

@@ -1,54 +1,14 @@
 """
 URL 解析工具测试
 
-覆盖核心场景：HF URL 解析、URL 类型检测
+覆盖核心场景：URL 类型检测、文件名提取
 """
 import pytest
 
 from src.lib.download.url_utils import (
-    parse_hf_url,
     detect_url_type,
+    extract_filename_from_url,
 )
-
-
-class TestParseHfUrl:
-    """HuggingFace URL 解析测试"""
-    
-    def test_standard_model_url(self):
-        """标准模型 URL 解析"""
-        url = "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors"
-        result = parse_hf_url(url)
-        
-        assert result is not None
-        repo_id, filename, revision, repo_type = result
-        assert repo_id == "black-forest-labs/FLUX.1-dev"
-        assert filename == "flux1-dev.safetensors"
-        assert revision == "main"
-        assert repo_type is None
-    
-    def test_dataset_url(self):
-        """Dataset URL 解析 - repo_type 为 dataset"""
-        url = "https://huggingface.co/datasets/my-org/my-dataset/resolve/main/data.parquet"
-        result = parse_hf_url(url)
-        
-        assert result is not None
-        repo_id, _, _, repo_type = result
-        assert repo_id == "my-org/my-dataset"
-        assert repo_type == "dataset"
-    
-    def test_nested_filename(self):
-        """嵌套路径文件名解析"""
-        url = "https://huggingface.co/org/repo/resolve/main/models/unet/model.safetensors"
-        result = parse_hf_url(url)
-        
-        assert result is not None
-        _, filename, _, _ = result
-        assert filename == "models/unet/model.safetensors"
-    
-    def test_invalid_url_returns_none(self):
-        """无效 URL 返回 None"""
-        assert parse_hf_url("https://example.com/file.bin") is None
-        assert parse_hf_url("https://huggingface.co/org/repo") is None
 
 
 class TestDetectUrlType:
@@ -59,3 +19,27 @@ class TestDetectUrlType:
         assert detect_url_type("https://huggingface.co/org/repo/resolve/main/file.bin") == "huggingface"
         assert detect_url_type("https://civitai.com/api/download/models/12345") == "civitai"
         assert detect_url_type("https://example.com/file.bin") == "direct"
+
+
+class TestExtractFilenameFromUrl:
+    """URL 文件名提取测试"""
+    
+    def test_huggingface_url(self):
+        """从 HuggingFace URL 提取文件名"""
+        url = "https://huggingface.co/org/repo/resolve/main/model.safetensors"
+        assert extract_filename_from_url(url) == "model.safetensors"
+    
+    def test_direct_url(self):
+        """从直链 URL 提取文件名"""
+        url = "https://example.com/path/to/model.ckpt"
+        assert extract_filename_from_url(url) == "model.ckpt"
+    
+    def test_civitai_url_returns_empty(self):
+        """CivitAI 下载 URL 返回空（无文件名）"""
+        url = "https://civitai.com/api/download/models/12345"
+        assert extract_filename_from_url(url) == ""
+    
+    def test_url_without_extension_returns_empty(self):
+        """无扩展名的路径返回空"""
+        url = "https://example.com/path/to/file"
+        assert extract_filename_from_url(url) == ""

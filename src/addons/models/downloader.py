@@ -12,9 +12,7 @@ Model Manager - ComfyUI 模型管理 CLI (交互式)
 缓存管理:
     model cache                             # 查看下载缓存
     model cache clear                       # 清理所有缓存
-    model cache clear --type hf             # 只清理 HuggingFace 缓存
     model cache clear --pattern FLUX        # 只清理包含 FLUX 的缓存
-    model cache clear-model <repo_id>       # 清理指定模型缓存
 """
 import argparse
 import logging
@@ -35,7 +33,6 @@ from src.lib.download import (
     extract_filename_from_url,
     cache_info,
     purge_cache,
-    purge_model_cache,
 )
 from src.lib.download.civitai import resolve_civitai_url
 from src.lib.download.url_utils import detect_url_type
@@ -428,15 +425,14 @@ def cmd_cache_list() -> None:
 
 
 def cmd_cache_clear(
-    cache_type: Optional[str] = None,
     pattern: Optional[str] = None,
     force: bool = False,
 ) -> None:
     """清理下载缓存"""
     if pattern:
-        ui.print_panel("清理缓存", f"类型: {cache_type or 'all'}\n匹配: *{pattern}*")
+        ui.print_panel("清理缓存", f"匹配: *{pattern}*")
     else:
-        ui.print_panel("清理缓存", f"类型: {cache_type or 'all'}\n范围: 全部")
+        ui.print_panel("清理缓存", "范围: 全部")
 
     if not force:
         ui.print_warning("此操作将删除下载缓存，已下载完成的模型不受影响。")
@@ -444,14 +440,7 @@ def cmd_cache_clear(
             ui.print_info("已取消")
             return
 
-    # cache_type 映射到策略名称（CLI 用 "hf"，策略名是 "hf_hub"）
-    strategy_name: Optional[str] = None
-    if cache_type == "hf":
-        strategy_name = "hf_hub"
-    elif cache_type == "aria2":
-        strategy_name = "aria2"
-
-    results = purge_cache(cache_type=strategy_name, pattern=pattern)
+    results = purge_cache(pattern=pattern)
 
     if not results:
         ui.print_info("没有需要清理的缓存")
@@ -471,26 +460,6 @@ def cmd_cache_clear(
         ui.print_success(f"共释放空间: {format_size(total_cleared // 1024)}")
 
 
-def cmd_cache_clear_model(repo_id: str, force: bool = False) -> None:
-    """清理指定 HuggingFace 模型的缓存"""
-    ui.print_panel("清理模型缓存", f"Repo: {repo_id}")
-
-    if not force:
-        ui.print_warning("此操作将删除该模型的下载缓存，重新下载时需要重新开始。")
-        if not ui.prompt_confirm("确认清理？", default=False):
-            ui.print_info("已取消")
-            return
-
-    result = purge_model_cache(repo_id)
-    if result is None:
-        ui.print_info("未找到该模型的缓存")
-    elif result.success:
-        size_str = format_size(result.freed_bytes // 1024) if result.freed_bytes > 0 else "0"
-        ui.print_success(f"缓存已清理 ({size_str})")
-    else:
-        ui.print_error(f"清理失败: {result.error}")
-
-
 # ============================================================
 # 入口
 # ============================================================
@@ -500,9 +469,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 下载策略:
-  - HuggingFace URL: 优先使用 hf_hub (Xet 高速下载)
-  - CivitAI: 自动解析模型信息，aria2c 多线程下载
-  - 直链: aria2c 多线程下载
+  - 所有 URL 类型统一使用 aria2c 多线程下载
 
 环境变量:
   HF_TOKEN           HuggingFace API Token
@@ -520,9 +487,7 @@ def main() -> None:
 缓存管理:
   model cache                      # 查看下载缓存
   model cache clear                # 清理所有缓存
-  model cache clear --type hf      # 只清理 HuggingFace 缓存
   model cache clear --pattern FLUX # 只清理包含 FLUX 的缓存
-  model cache clear-model <repo>   # 清理指定模型缓存
         """
     )
     sub = parser.add_subparsers(dest="cmd")
@@ -543,19 +508,10 @@ def main() -> None:
     
     cache_clear = cache_sub.add_parser("clear", help="清理下载缓存")
     cache_clear.add_argument(
-        "-t", "--type",
-        choices=["hf", "aria2", "all"],
-        help="缓存类型 (hf=HuggingFace, aria2=Aria2临时文件)"
-    )
-    cache_clear.add_argument(
         "-p", "--pattern",
         help="匹配模式 (如 FLUX 只清理包含 FLUX 的缓存)"
     )
     cache_clear.add_argument("-f", "--force", action="store_true", help="跳过确认")
-    
-    cache_model = cache_sub.add_parser("clear-model", help="清理指定 HF 模型缓存")
-    cache_model.add_argument("repo", help="HuggingFace repo_id (如 black-forest-labs/FLUX.2-klein-9B)")
-    cache_model.add_argument("-f", "--force", action="store_true", help="跳过确认")
     
     args = parser.parse_args()
     
@@ -579,12 +535,9 @@ def main() -> None:
             cmd_cache_list()
         elif args.cache_cmd == "clear":
             cmd_cache_clear(
-                cache_type=args.type,
                 pattern=args.pattern,
                 force=args.force
             )
-        elif args.cache_cmd == "clear-model":
-            cmd_cache_clear_model(args.repo, force=args.force)
         else:
             cache_parser.print_help()
     else:

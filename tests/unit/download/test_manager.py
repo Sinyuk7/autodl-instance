@@ -12,37 +12,28 @@ from src.lib.download.base import DownloadStrategy
 
 
 class TestStrategySelection:
-    """策略选择逻辑测试"""
+    """策略选择逻辑测试 - 所有 URL 统一使用 aria2"""
     
-    def test_hf_url_selects_hf_strategy_when_available(self):
-        """HF URL + HF 策略可用 → 选择 hf_hub"""
-        manager = DownloadManager()
-        manager._hf_strategy._enabled = True
-        
-        with patch.object(manager._hf_strategy, 'is_available', return_value=True):
-            strategy = manager.get_strategy(
-                "https://huggingface.co/org/repo/resolve/main/model.safetensors"
-            )
-        
-        assert strategy.name == "hf_hub"
-    
-    def test_hf_url_fallback_to_aria2_when_hf_unavailable(self):
-        """HF URL + HF 不可用 → 回退 aria2"""
+    def test_all_urls_select_aria2(self):
+        """所有 URL 类型统一使用 aria2 策略"""
         manager = DownloadManager()
         
-        with patch.object(manager._hf_strategy, 'is_available', return_value=False), \
-             patch.object(manager._aria2_strategy, 'is_available', return_value=True):
-            strategy = manager.get_strategy(
-                "https://huggingface.co/org/repo/resolve/main/model.safetensors"
-            )
+        # 测试各种 URL 类型都返回 aria2 策略
+        urls = [
+            "https://huggingface.co/org/repo/resolve/main/model.safetensors",
+            "https://example.com/model.bin",
+            "https://civitai.com/api/download/models/12345",
+        ]
         
-        assert strategy.name == "aria2"
+        for url in urls:
+            strategy = manager.get_strategy(url)
+            assert strategy.name == "aria2", f"URL {url} should use aria2 strategy"
     
     def test_direct_url_selects_aria2(self):
         """直链 URL → 选择 aria2"""
         manager = DownloadManager()
         
-        with patch.object(manager._aria2_strategy, 'is_available', return_value=True):
+        with patch.object(manager._strategies["aria2"], 'is_available', return_value=True):
             strategy = manager.get_strategy("https://example.com/model.bin")
         
         assert strategy.name == "aria2"
@@ -51,7 +42,7 @@ class TestStrategySelection:
         """CivitAI URL → 选择 aria2"""
         manager = DownloadManager()
         
-        with patch.object(manager._aria2_strategy, 'is_available', return_value=True):
+        with patch.object(manager._strategies["aria2"], 'is_available', return_value=True):
             strategy = manager.get_strategy(
                 "https://civitai.com/api/download/models/12345"
             )
@@ -119,14 +110,13 @@ class TestDownloadLifecycle:
 class TestCacheAggregation:
     """缓存聚合测试"""
     
-    def test_cache_info_aggregates_all_strategies(self):
-        """cache_info 聚合所有策略的缓存条目"""
+    def test_cache_info_returns_aria2_entries(self):
+        """cache_info 返回 Aria2 缓存条目"""
         manager = DownloadManager()
         
         # 调用实际的 cache_info
         entries = manager.cache_info()
         
-        # 应该包含 HF 和 Aria2 的缓存条目
+        # 应该包含 Aria2 的缓存条目
         names = [e.name for e in entries]
-        assert any("HuggingFace" in name for name in names)
         assert any("Aria2" in name for name in names)

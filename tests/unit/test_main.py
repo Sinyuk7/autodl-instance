@@ -158,7 +158,7 @@ class TestMain:
         """初始化顺序: logger → kill → network → context → execute"""
         call_order = []
         
-        with patch("src.main.setup_logger", side_effect=lambda *a: call_order.append("logger")), \
+        with patch("src.main.setup_logger", side_effect=lambda *a, **kw: call_order.append("logger")), \
              patch("src.main.kill_process_by_name", side_effect=lambda *a, **kw: call_order.append("kill")), \
              patch("src.main.setup_network", side_effect=lambda: call_order.append("network")), \
              patch("src.main.create_context", side_effect=lambda **kw: call_order.append("context")), \

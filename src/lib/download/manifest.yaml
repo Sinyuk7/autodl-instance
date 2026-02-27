@@ -1,4 +1,4 @@
-# 下载器配置 - aria2 + hf_hub
+# 下载器配置 - aria2
 # 公开技术参数，可安全提交到 Git
 # API 密钥请配置在 secrets.yaml 中
 
@@ -21,30 +21,3 @@ aria2:
   # falloc: 快速预分配(ext4/xfs)，推荐 SSD
   file_allocation: none
 
-# ===========================================
-# hf_hub 配置 (HuggingFace 官方下载，自动利用 Xet 加速)
-# ===========================================
-hf_hub:
-  enabled: true
-  # HuggingFace URL 的下载策略
-  # - "hf_hub":  使用 huggingface_hub 库 + Xet 协议（默认，支持断点续传和版本缓存）
-  # - "aria2":   使用 aria2 多线程 HTTP 下载（绕过 Xet 协议，适合镜像站/代理兼容性差的场景）
-  # 当镜像站对 Xet 格式没有 CDN 缓存、或学术加速代理与 Xet 冲突时，建议切换为 aria2
-  prefer_strategy: "aria2"
-  # 是否启用 Xet 协议 (chunk-based 去重加速)
-  # - true:  使用 hf_xet 下载，海外直连/代理场景最优
-  # - false: 回退传统 HTTP 下载，国内镜像站 CDN 缓存可命中，速度更快
-  # 如果使用 hf-mirror.com 且速度慢 (镜像站未缓存 Xet 格式)，建议设为 false
-  xet_enabled: true
-  # 开启 Xet 高性能模式 (替代原 hf_transfer，榨干带宽和 CPU)
-  xet_high_performance: true
-  # Xet Chunk Cache 大小 (MB)
-  # - 设为 0: 禁用 (hf_xet 1.2.0+ 默认行为，一次性大模型下载更快)
-  # - 设为 10240+: 启用 10GB chunk 缓存 (频繁更新同一仓库时推荐，可利用分块去重)
-  xet_chunk_cache_mb: 0
-  # 是否为机械硬盘优化 (顺序写入，SSD 无需开启)
-  xet_write_sequentially: false
-  # ETag 检查超时 (秒)，低值可加速已缓存文件的检查
-  etag_timeout: 10
-  # Xet 并发获取数 (高带宽场景可调高，默认 16)
-  xet_concurrent_gets: 16

@@ -2,17 +2,21 @@
 下载管理器 - 根据 URL 自动选择最佳策略
 
 特性:
+  - 策略模式设计，易于扩展新的下载方式
   - 自动检测 URL 类型选择最佳策略
   - 懒加载安装（首次使用时检查并安装依赖）
-  - 支持 HuggingFace, CivitAI, 直链
   - 缓存管理聚合（遍历各策略，无硬编码路径）
+
+扩展新策略:
+  1. 创建新策略类，继承 DownloadStrategy
+  2. 在 _register_strategies() 中注册
+  3. 在 get_strategy() 中添加选择逻辑
 """
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from src.lib.download.base import CacheEntry, DownloadStrategy, PurgeResult
-from src.lib.download.hf_hub import HuggingFaceHubStrategy
 from src.lib.download.aria2 import Aria2Strategy
 from src.lib.download.url_utils import detect_url_type
 
@@ -21,27 +25,46 @@ logger = logging.getLogger("autodl_setup")
 
 class DownloadManager:
     """下载管理器 - 根据 URL 自动选择最佳策略
-
-    策略优先级:
-      1. HuggingFace URL → 由 prefer_strategy 配置决定（默认 hf_hub）
-      2. 所有 URL       → Aria2Strategy（多线程）
+    
+    设计原则:
+      - 策略模式: 每种下载方式实现 DownloadStrategy 接口
+      - 开闭原则: 新增策略只需注册，无需修改核心下载逻辑
+      - 懒加载: 首次下载时才安装依赖工具
+    
+    当前支持的策略:
+      - aria2: 多线程 HTTP/HTTPS 下载（默认）
+    
+    扩展示例（添加 wget 策略）:
+      1. 创建 src/lib/download/wget.py，实现 WgetStrategy(DownloadStrategy)
+      2. 在 _register_strategies() 中添加: self._strategies["wget"] = WgetStrategy()
+      3. 在 get_strategy() 中添加选择逻辑
     """
 
     def __init__(self) -> None:
-        # 各策略自行加载配置，manager 只负责组装
-        self._hf_strategy    = HuggingFaceHubStrategy()
-        self._aria2_strategy = Aria2Strategy()
-
-        # 读取 HF URL 的首选策略
-        self._hf_prefer = self._hf_strategy._load_config().get("prefer_strategy", "hf_hub")
-
-        # 所有策略列表，供缓存聚合使用
-        self._all_strategies: List[DownloadStrategy] = [
-            self._hf_strategy,
-            self._aria2_strategy,
-        ]
-
+        # 策略注册表: name -> strategy instance
+        self._strategies: Dict[str, DownloadStrategy] = {}
+        self._register_strategies()
+        
+        # 默认策略（当其他策略都不可用时的回退）
+        self._default_strategy_name = "aria2"
+        
         self._initialized = False
+
+    def _register_strategies(self) -> None:
+        """注册所有可用的下载策略
+        
+        扩展点: 新增策略时在此注册
+        """
+        self._strategies["aria2"] = Aria2Strategy()
+        
+        # 示例: 未来可以添加更多策略
+        # self._strategies["wget"] = WgetStrategy()
+        # self._strategies["curl"] = CurlStrategy()
+
+    @property
+    def _all_strategies(self) -> List[DownloadStrategy]:
+        """所有已注册策略的列表"""
+        return list(self._strategies.values())
 
     # ── 懒加载 ──────────────────────────────────────────────
 
@@ -51,34 +74,39 @@ class DownloadManager:
             return
         self._initialized = True
 
-        if not self._aria2_strategy.is_available():
-            self._aria2_strategy.ensure_available()
-
-        if self._hf_strategy.is_available():
-            self._hf_strategy.ensure_available()
+        # 确保默认策略可用
+        default_strategy = self._strategies.get(self._default_strategy_name)
+        if default_strategy and not default_strategy.is_available():
+            default_strategy.ensure_available()
 
     # ── 策略选择 ─────────────────────────────────────────────
 
     def get_strategy(self, url: str) -> DownloadStrategy:
         """根据 URL 选择最佳下载策略
-
-        HuggingFace URL 的策略由 manifest.yaml 中 hf_hub.prefer_strategy 决定:
-          - "hf_hub": 使用 huggingface_hub 库 + Xet（默认）
-          - "aria2":  使用 aria2 多线程 HTTP 下载（绕过 Xet）
+        
+        选择逻辑（按优先级）:
+          1. 根据 URL 类型匹配特定策略（如有）
+          2. 回退到默认策略
+        
+        扩展点: 添加新策略的选择逻辑
+        
+        Args:
+            url: 下载链接
+            
+        Returns:
+            最适合的下载策略实例
         """
         url_type = detect_url_type(url)
-
-        if url_type == "huggingface":
-            if self._hf_prefer == "aria2" and self._aria2_strategy.is_available():
-                return self._aria2_strategy
-            if self._hf_strategy.is_available():
-                return self._hf_strategy
-
-        if self._aria2_strategy.is_available():
-            return self._aria2_strategy
-
-        # aria2 不可用时回退到 hf_strategy（仅支持 HF URL），下载时会有明确报错
-        return self._hf_strategy
+        
+        # ── 策略选择逻辑 ──
+        # 扩展示例: 
+        # if url_type == "magnet" and "torrent" in self._strategies:
+        #     strategy = self._strategies["torrent"]
+        #     if strategy.is_available():
+        #         return strategy
+        
+        # 默认: 所有 URL 类型使用 aria2 多线程下载
+        return self._strategies[self._default_strategy_name]
 
     # ── 下载 ─────────────────────────────────────────────────
 
@@ -134,7 +162,7 @@ class DownloadManager:
         """聚合清理所有（或指定类型）策略的缓存
 
         Args:
-            cache_type: 策略名称过滤（如 "hf_hub"、"aria2"），None 表示全部
+            cache_type: 策略名称过滤（如 "aria2"），None 表示全部
             pattern:    传递给各策略的匹配模式
 
         Returns:
@@ -146,14 +174,6 @@ class DownloadManager:
                 continue
             results.extend(strategy.purge_cache(pattern=pattern))
         return results
-
-    def purge_model_cache(self, repo_id: str) -> Optional[PurgeResult]:
-        """精准清理指定 HuggingFace 模型的缓存
-
-        Args:
-            repo_id: 如 "black-forest-labs/FLUX.2-klein-9B"
-        """
-        return self._hf_strategy.purge_model_cache(repo_id)
 
 
 # ============================================================
@@ -186,8 +206,3 @@ def purge_cache(
 ) -> List[PurgeResult]:
     """清理下载缓存"""
     return _get_manager().purge_cache(cache_type=cache_type, pattern=pattern)
-
-
-def purge_model_cache(repo_id: str) -> Optional[PurgeResult]:
-    """清理指定 HuggingFace 模型缓存"""
-    return _get_manager().purge_model_cache(repo_id)
