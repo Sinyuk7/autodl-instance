@@ -1,6 +1,6 @@
 """
 Models Addon - ComfyUI 模型目录管理
-负责 extra_model_paths.yaml 复制和模型目录初始化
+负责 extra_model_paths.yaml 复制、模型目录初始化、sync 时生成模型快照
 """
 import os
 from pathlib import Path
@@ -8,6 +8,7 @@ from typing import List
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
 from src.core.utils import logger
+from src.lib.utils import load_yaml, save_yaml
 
 
 class ModelAddon(BaseAddon):
@@ -104,4 +105,34 @@ class ModelAddon(BaseAddon):
 
     @hookimpl
     def sync(self, context: AppContext) -> None:
-        pass
+        """同步钩子：扫描模型目录生成快照，清理孤儿 .meta"""
+        from src.addons.models.lock import generate_snapshot, cleanup_orphan_metas
+        from src.addons.models.config import LOCK_FILE
+
+        logger.info("\n>>> [Models] 开始生成模型快照...")
+
+        models_dir = context.artifacts.models_dir
+        if not models_dir or not models_dir.exists():
+            logger.warning("  -> [WARN] 模型目录不存在，跳过快照生成")
+            return
+
+        # 1. 清理孤儿 .meta 文件
+        cleaned = cleanup_orphan_metas(models_dir)
+        if cleaned > 0:
+            logger.info(f"  -> 已清理 {cleaned} 个孤儿 .meta 文件")
+
+        # 2. 加载上一次 lock (用于增量 hash)
+        previous_lock = load_yaml(LOCK_FILE)
+
+        # 3. 生成快照
+        snapshot = generate_snapshot(models_dir, previous_lock)
+
+        model_count = len(snapshot.get("models", []))
+        if model_count == 0:
+            logger.info("  -> 模型目录为空，跳过快照写入")
+            return
+
+        # 4. 写入 model-lock.yaml
+        LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        save_yaml(LOCK_FILE, snapshot)
+        logger.info(f"  -> 快照已保存: {LOCK_FILE} ({model_count} 个模型)")

@@ -189,7 +189,12 @@ class HuggingFaceHubStrategy(DownloadStrategy):
         """使用 huggingface_hub 下载 HF 文件
         
         dry_run=True 时调用 hf_hub_download(dry_run=True) 预估下载量，不实际写盘。
+        
+        注意: 当 HF repo 中的 filename 包含子路径（如 split_files/text_encoders/model.safetensors）
+        时，hf_hub_download 的 local_dir 模式会在目标目录下创建这些嵌套目录。为避免污染用户
+        的模型目录，当 filename 含 "/" 时，先下载到临时目录，再将文件 move 到 target_path。
         """
+        import tempfile
         from huggingface_hub import hf_hub_download  # type: ignore[import-untyped]
 
         parsed = parse_hf_url(url)
@@ -200,12 +205,22 @@ class HuggingFaceHubStrategy(DownloadStrategy):
         repo_id, filename, revision, repo_type = parsed
         self._current_filename = filename
 
+        # 判断 filename 是否含子路径（如 split_files/text_encoders/model.safetensors）
+        # 若含子路径，使用临时目录作为 local_dir，避免在目标目录下创建嵌套空目录
+        has_nested_path = "/" in filename
+        if has_nested_path:
+            staging_dir = Path(tempfile.mkdtemp(prefix="hf_dl_"))
+            local_dir = str(staging_dir)
+        else:
+            staging_dir = None
+            local_dir = str(target_path.parent)
+
         token = os.environ.get(ENV_HF_TOKEN)
 
         download_kwargs: Dict[str, Any] = {
             "repo_id":    repo_id,
             "filename":   filename,
-            "local_dir":  str(target_path.parent),
+            "local_dir":  local_dir,
             "local_dir_use_symlinks": False,
         }
         if revision:
@@ -217,11 +232,9 @@ class HuggingFaceHubStrategy(DownloadStrategy):
 
         # ── dry_run 模式 ──────────────────────────────────
         if dry_run:
-            # 注入环境变量以确保与实际下载行为一致
             self._inject_env_vars()
             try:
                 result = hf_hub_download(**download_kwargs, dry_run=True)
-                # DryRunFileInfo: .size 为需要下载的字节数，0 表示已缓存
                 size = getattr(result, "size", None)
                 if size == 0:
                     logger.info(f"  -> [hf_hub] [dry-run] {filename} 已缓存，无需下载")
@@ -232,26 +245,35 @@ class HuggingFaceHubStrategy(DownloadStrategy):
             except Exception as e:
                 logger.error(f"  -> [ERROR] dry_run 预估失败: {e}")
                 return False
+            finally:
+                if staging_dir and staging_dir.exists():
+                    shutil.rmtree(staging_dir, ignore_errors=True)
 
         # ── 正式下载（生命周期由 Manager 统一编排）─────────
         logger.info(f"  -> [hf_hub] 下载: {repo_id} / {filename}")
 
-        downloaded_path = Path(hf_hub_download(**download_kwargs))
+        try:
+            downloaded_path = Path(hf_hub_download(**download_kwargs))
 
-        # 若下载路径与目标路径不一致，移动文件
-        if downloaded_path.exists() and downloaded_path.resolve() != target_path.resolve():
+            # 将文件移到最终目标路径
+            if downloaded_path.exists() and downloaded_path.resolve() != target_path.resolve():
+                if target_path.exists():
+                    target_path.unlink()
+                shutil.move(str(downloaded_path), str(target_path))
+                logger.debug(f"  -> [hf_hub] 已移动: {downloaded_path.name} → {target_path.name}")
+
             if target_path.exists():
-                target_path.unlink()
-            shutil.move(str(downloaded_path), str(target_path))
-            logger.debug(f"  -> [hf_hub] 已移动: {downloaded_path.name} → {target_path.name}")
-
-        if target_path.exists():
-            size_mb = target_path.stat().st_size / (1024 * 1024)
-            logger.info(f"  -> [hf_hub] 完成: {target_path.name} ({size_mb:.1f} MB)")
-            return True
-        else:
-            logger.error(f"  -> [ERROR] 下载完成但文件不存在: {target_path}")
-            return False
+                size_mb = target_path.stat().st_size / (1024 * 1024)
+                logger.info(f"  -> [hf_hub] 完成: {target_path.name} ({size_mb:.1f} MB)")
+                return True
+            else:
+                logger.error(f"  -> [ERROR] 下载完成但文件不存在: {target_path}")
+                return False
+        finally:
+            # 清理临时目录（含嵌套子路径和 .cache 元数据，一次全删干净）
+            if staging_dir and staging_dir.exists():
+                shutil.rmtree(staging_dir, ignore_errors=True)
+                logger.debug(f"  -> [hf_hub] 已清理临时目录: {staging_dir}")
 
     # ── 缓存管理 ─────────────────────────────────────────────
 

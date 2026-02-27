@@ -18,7 +18,7 @@ class ModelEntry(BaseModel):
     model: str               # 模型唯一标识名
     url: str                 # 下载 URL（支持 HuggingFace / CivitAI / 直链）
     paths: List[ModelPath]   # 存放路径列表（通常只有一个）
-    type: str                # 模型类型，对应 extra_model_paths.yaml 中的 key
+    type: Optional[str] = None  # 模型类型（可选标签，path 是真相，type 是注释）
 
     @field_validator("paths")
     @classmethod

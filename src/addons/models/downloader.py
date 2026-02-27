@@ -6,9 +6,8 @@ Model Manager - ComfyUI 模型管理 CLI (交互式)
     model download <URL>                    # 交互式下载 (自动识别类型)
     model download -p FLUX.2-klein-9B       # 下载预设中的所有模型
     model list                              # 列出已下载模型
-    model status                            # 查看 lock 记录
+    model status                            # 查看快照记录 (model-lock.yaml)
     model types                             # 显示可用模型类型
-    model remove <model_name>               # 删除模型
     
 缓存管理:
     model cache                             # 查看下载缓存
@@ -37,17 +36,17 @@ from src.lib.download import (
 from src.lib.download.civitai import resolve_civitai_url
 from src.lib.download.url_utils import detect_url_type
 from src.lib import ui
-from src.lib.utils import load_yaml, save_yaml, sha256, format_size
+from src.lib.utils import load_yaml, format_size
 
 # 导入本地模块
 from src.addons.models.config import (
     PRESETS_FILE,
-    LOCK_FILE,
     get_models_base,
     get_type_dir_mapping,
     resolve_type_to_dir,
+    LOCK_FILE,
 )
-from src.addons.models.lock import find_in_lock, update_lock, remove_from_lock
+from src.addons.models.lock import write_meta
 from src.addons.models.schema import PresetsFile
 
 
@@ -74,10 +73,17 @@ def cmd_list() -> None:
         ui.print_warning("目录不存在")
         return
     
-    # 收集模型文件
+    # 收集模型文件 (排除法: 跳过隐藏文件和已知非模型扩展名)
+    from src.addons.models.lock import EXCLUDED_EXTENSIONS
     model_files: List[Path] = []
-    for ext in ("*.safetensors", "*.ckpt", "*.pt", "*.pth"):
-        model_files.extend(base.rglob(ext))
+    for f in base.rglob("*"):
+        if not f.is_file():
+            continue
+        if f.name.startswith("."):
+            continue
+        if f.suffix.lower() in EXCLUDED_EXTENSIONS:
+            continue
+        model_files.append(f)
     
     if not model_files:
         ui.print_info("暂无模型文件")
@@ -148,53 +154,24 @@ def cmd_types() -> None:
 
 
 # ============================================================
-# CLI 命令 - remove
-# ============================================================
-def cmd_remove(model_name: str, force: bool = False) -> None:
-    """删除指定模型 (支持确认)"""
-    lock = load_yaml(LOCK_FILE)
-    base = get_models_base()
-    
-    model_entry = find_in_lock(lock, model_name)
-    
-    if not model_entry:
-        ui.print_error(f"未在 lock 中找到模型: {model_name}")
-        ui.print_info("使用 'model status' 查看已记录的模型")
-        sys.exit(1)
-    
-    paths = model_entry.get("paths", [])
-    rel_path = paths[0].get("path", "") if paths else ""
-    target = base / rel_path if rel_path else None
-    
-    ui.print_panel("删除模型", f"名称: {model_name}\n路径: {target or 'N/A'}")
-    
-    if not force:
-        if not ui.prompt_confirm("确认删除？", default=False):
-            ui.print_info("已取消")
-            return
-    
-    if target and target.exists():
-        try:
-            target.unlink()
-            ui.print_success(f"已删除文件: {target}")
-        except OSError as e:
-            ui.print_error(f"删除文件失败: {e}")
-            sys.exit(1)
-    else:
-        ui.print_warning(f"文件不存在: {target}")
-    
-    if remove_from_lock(lock, model_name):
-        save_yaml(LOCK_FILE, lock)
-        ui.print_success("已从 lock 中移除记录")
-
-
-# ============================================================
 # CLI 命令 - download (交互式)
 # ============================================================
+def _write_download_meta(target_path: Path, url: str, source: str,
+                         model_name: Optional[str] = None) -> None:
+    """下载完成后写入 .meta sidecar"""
+    from datetime import datetime, timezone
+    meta = {
+        "url": url,
+        "source": source,
+        "model": model_name or target_path.stem,
+        "downloaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    write_meta(target_path, meta)
+
+
 def cmd_download_interactive(url: str) -> None:
     """交互式下载单个模型"""
     base = get_models_base()
-    lock = load_yaml(LOCK_FILE)
     url_type = detect_url_type(url)
     
     # 用于存储解析结果
@@ -336,17 +313,8 @@ def cmd_download_interactive(url: str) -> None:
         ui.print_error("下载失败")
         sys.exit(1)
     
-    # ========== Step 8: 记录到 lock ==========
-    model_name = target_path.stem
-    
-    update_lock(lock, {
-        "model": model_name,
-        "url": url,  # 保存原始 URL
-        "paths": [{"path": rel_path}],
-        "hashes": [{"hash": sha256(target_path), "type": "SHA256"}],
-        "type": final_type,
-    })
-    save_yaml(LOCK_FILE, lock)
+    # ========== Step 8: 写入 .meta sidecar ==========
+    _write_download_meta(target_path, url=url, source=url_type)
     
     ui.print_success(f"下载完成: {rel_path}")
 
@@ -378,7 +346,6 @@ def cmd_download_preset(preset_name: str) -> None:
 
     preset = presets[matched_name]
     base = get_models_base()
-    lock = load_yaml(LOCK_FILE)
 
     ui.print_panel(
         f"预设: {matched_name}",
@@ -394,8 +361,8 @@ def cmd_download_preset(preset_name: str) -> None:
         rel_path = entry.primary_path
         target = base / rel_path
 
-        # 幂等性检查
-        if find_in_lock(lock, name) and target.exists():
+        # 幂等性检查：以本地文件是否存在为准
+        if target.exists():
             ui.print_info(f"[{name}] 已存在，跳过")
             skip_count += 1
             continue
@@ -406,14 +373,9 @@ def cmd_download_preset(preset_name: str) -> None:
 
         if core_download(entry.url, target):
             if target.exists():
-                update_lock(lock, {
-                    "model": name,
-                    "url": entry.url,
-                    "paths": [p.model_dump() for p in entry.paths],
-                    "hashes": [{"hash": sha256(target), "type": "SHA256"}],
-                    "type": entry.type,
-                })
-                save_yaml(LOCK_FILE, lock)
+                # 写入 .meta sidecar（不动 model-lock.yaml）
+                _write_download_meta(target, url=entry.url, source="preset",
+                                     model_name=name)
                 ui.print_success(f"[{name}] 完成")
                 success_count += 1
             else:
@@ -548,9 +510,8 @@ def main() -> None:
   model download -p FLUX.2-klein-9B
 
   model list                       # 列出模型文件
-  model status                     # 查看 lock 记录
+  model status                     # 查看快照记录
   model types                      # 显示可用模型类型
-  model remove <model_name>        # 删除模型
 
 缓存管理:
   model cache                      # 查看下载缓存
@@ -569,10 +530,6 @@ def main() -> None:
     dl = sub.add_parser("download", help="下载模型 (交互式)")
     dl.add_argument("url", nargs="?", help="模型 URL (HuggingFace, CivitAI, 直链)")
     dl.add_argument("-p", "--preset", help="预设名称 (见 manifest.yaml)")
-    
-    rm = sub.add_parser("remove", help="删除模型")
-    rm.add_argument("model", help="模型名称 (见 model status)")
-    rm.add_argument("-f", "--force", action="store_true", help="跳过确认")
     
     # 缓存管理子命令
     cache_parser = sub.add_parser("cache", help="缓存管理")
@@ -613,8 +570,6 @@ def main() -> None:
             ui.print_error("请提供 URL 或 --preset 参数")
             dl.print_help()
             sys.exit(1)
-    elif args.cmd == "remove":
-        cmd_remove(args.model, args.force)
     elif args.cmd == "cache":
         if args.cache_cmd == "list" or args.cache_cmd is None:
             cmd_cache_list()

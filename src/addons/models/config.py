@@ -15,7 +15,7 @@ from src.lib.utils import load_yaml
 ADDON_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = ADDON_DIR.parent.parent.parent
 PRESETS_FILE = ADDON_DIR / "manifest.yaml"
-LOCK_FILE = PROJECT_ROOT / "my-comfyui-backup" / "model_lock.yaml"
+LOCK_FILE = PROJECT_ROOT / "my-comfyui-backup" / "model-lock.yaml"
 EXTRA_PATHS_FILE = ADDON_DIR / "extra_model_paths.yaml"
 
 
