@@ -29,10 +29,27 @@ class _RedirectHandlerKeepUA(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new_req is not None:
-            # 保留原始请求的 User-Agent
-            ua = req.get_header("User-agent")  # urllib 内部用首字母大写
+            # 诊断：打印重定向前后的 headers
+            orig_ua = req.get_header("User-agent") or req.header_items()
+            logger.debug(
+                f"  -> [REDIRECT] {code} -> {newurl}\n"
+                f"     原始 headers: {req.header_items()}\n"
+                f"     新请求 headers (before fix): {new_req.header_items()}"
+            )
+
+            # 从原始请求中提取 UA（urllib 内部存储格式: 首字母大写 "User-agent"）
+            ua = req.get_header("User-agent")
+            if not ua:
+                # 也可能在 unredirected_headers 中
+                ua = req.unredirected_hdrs.get("User-Agent") or req.unredirected_hdrs.get("User-agent")
+
             if ua:
-                new_req.add_unredirected_header("User-Agent", ua)
+                # add_header 会被重定向清除，用 add_unredirected_header 更持久
+                new_req.add_unredirected_header("User-agent", ua)
+                # 同时也加到普通 headers 中（双保险）
+                new_req.add_header("User-agent", ua)
+
+            logger.debug(f"     新请求 headers (after fix): {new_req.header_items()}")
         return new_req
 
 
