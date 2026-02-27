@@ -4,7 +4,7 @@ Artifacts - 插件间共享的强类型数据容器
 支持持久化到 JSON 文件，实现跨进程共享（setup → start → sync）。
 """
 import json
-from dataclasses import dataclass, fields, asdict
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Optional, Any, Dict
 

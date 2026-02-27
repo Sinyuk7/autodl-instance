@@ -3,7 +3,7 @@
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pluggy
 
@@ -38,10 +38,10 @@ class AppContext:
     debug: bool = False
     
     # === 执行追踪（用于调试和测试）===
-    execution_log: List[str] = field(default_factory=list)
+    execution_log: List[str] = field(default_factory=lambda: [])
     
     # === 预加载的 Manifest（避免插件直接读文件）===
-    addon_manifests: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    addon_manifests: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {})
 
 
 # 兼容别名

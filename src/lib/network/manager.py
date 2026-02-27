@@ -163,7 +163,7 @@ class NetworkManager:
         config.config_dir.mkdir(parents=True, exist_ok=True)
 
         # 复制所有同步文件
-        restored = []
+        restored: List[str] = []
         for filename in _SYNC_FILES:
             src = backup_dir / filename
             if src.exists() and src.stat().st_size > 0:
@@ -291,7 +291,7 @@ class NetworkManager:
 
         backup_dir.mkdir(parents=True, exist_ok=True)
 
-        synced = []
+        synced: List[str] = []
         for filename in _SYNC_FILES:
             src = config.config_dir / filename
             if src.exists() and src.stat().st_size > 0:

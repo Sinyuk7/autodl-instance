@@ -7,7 +7,6 @@ ProxyBackend - 代理后端抽象接口
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass

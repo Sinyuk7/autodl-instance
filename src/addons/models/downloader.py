@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""
-Model Manager - ComfyUI 模型管理 CLI (交互式)
-
-使用方式 (通过 bin/model 脚本):
-    model download <URL>                    # 交互式下载 (自动识别类型)
-    model download -p FLUX.2-klein-9B       # 下载预设中的所有模型
-    model list                              # 列出已下载模型
-    model status                            # 查看快照记录 (model-lock.yaml)
-    model types                             # 显示可用模型类型
-    
-缓存管理:
-    model cache                             # 查看下载缓存
-    model cache clear                       # 清理所有缓存
-"""
 import argparse
 import logging
 import sys

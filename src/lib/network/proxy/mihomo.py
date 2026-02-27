@@ -17,7 +17,11 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from src.lib.network.proxy.base import ProxyBackend, ProxyConfig
+# Unix 信号常量 (Windows 上不存在，使用 getattr 安全获取)
+_SIGTERM: int = getattr(signal, "SIGTERM", 15)
+_SIGKILL: int = getattr(signal, "SIGKILL", 9)
+
+from src.lib.network.proxy.base import ProxyBackend
 from src.lib.network.proxy.installer import install_mihomo
 from src.lib.network.proxy.config import download_subscription
 
@@ -172,7 +176,7 @@ class MihomoBackend(ProxyBackend):
             return True
 
         try:
-            os.kill(pid, signal.SIGTERM)
+            os.kill(pid, _SIGTERM)
 
             # 等待进程退出（最多 5 秒）
             for _ in range(10):
@@ -184,7 +188,7 @@ class MihomoBackend(ProxyBackend):
             else:
                 logger.warning(f"  -> [WARN] mihomo (PID: {pid}) SIGTERM 超时，强制 SIGKILL")
                 try:
-                    os.kill(pid, signal.SIGKILL)
+                    os.kill(pid, _SIGKILL)
                 except ProcessLookupError:
                     pass
 

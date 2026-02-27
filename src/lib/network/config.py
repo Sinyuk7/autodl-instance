@@ -4,6 +4,7 @@
 集中管理路径、环境变量 Key、导出列表等。
 """
 from pathlib import Path
+from typing import List
 
 from src.core.schema import EnvKey
 
@@ -25,7 +26,7 @@ AUTODL_TURBO_KEYS = [
 ]
 
 # ── 需要导出到用户 shell 的环境变量 ────────────────────────
-EXPORT_KEYS = [
+EXPORT_KEYS: List[str] = [
     # 代理
     "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
     "no_proxy", "NO_PROXY",

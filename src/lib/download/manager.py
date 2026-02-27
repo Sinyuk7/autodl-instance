@@ -96,11 +96,11 @@ class DownloadManager:
         Returns:
             最适合的下载策略实例
         """
-        url_type = detect_url_type(url)
+        _url_type = detect_url_type(url)
         
         # ── 策略选择逻辑 ──
         # 扩展示例: 
-        # if url_type == "magnet" and "torrent" in self._strategies:
+        # if _url_type == "magnet" and "torrent" in self._strategies:
         #     strategy = self._strategies["torrent"]
         #     if strategy.is_available():
         #         return strategy

@@ -4,10 +4,9 @@ ComfyUI 自定义节点管理插件
 import configparser
 import sys
 from pathlib import Path
-from typing import List, cast
+from typing import Any, Dict, List, cast
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
-from src.core.schema import StateKey
 from src.core.utils import logger
 
 
@@ -165,13 +164,15 @@ class NodesAddon(BaseAddon):
         # 2. 全新安装（从 manifest）
         logger.info("  -> 执行基于 manifest 的全新安装...")
         manifest = self.get_manifest(ctx)
-        nodes = cast(List[dict], manifest.get("default_nodes", []))
+        nodes = cast(List[Dict[str, Any]], manifest.get("default_nodes", []))
         
         if not nodes:
             logger.info("  -> manifest 中无节点声明，跳过")
             return
         
         custom_nodes_dir = ctx.artifacts.custom_nodes_dir
+        if not custom_nodes_dir:
+            raise RuntimeError("nodes 插件需要 comfy_core 先执行以设置 custom_nodes_dir")
         custom_nodes_dir.mkdir(parents=True, exist_ok=True)
         
         for node in nodes:

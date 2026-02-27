@@ -84,9 +84,8 @@ class FileStateManager(IStateManager):
         self.state_dir.mkdir(parents=True, exist_ok=True)
     
     def _get_path(self, key: str) -> Path:
-        # 支持 Enum 和 str
-        k = key.value if hasattr(key, 'value') else key
-        return self.state_dir / f"{k}.done"
+        # StateKey 继承自 str，可直接作为字符串使用
+        return self.state_dir / f"{key}.done"
     
     def is_completed(self, key: str) -> bool:
         return self._get_path(key).exists()

@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, cast
 
 from src.lib.network.proxy.base import ProxyConfig
 
@@ -179,7 +179,8 @@ def patch_config(config: ProxyConfig, config_file: Path) -> None:
 
     try:
         with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+            raw = yaml.safe_load(f)
+        data: Dict[str, Any] = cast(Dict[str, Any], raw if raw else {})
 
         # ── 1. 清理旧式端口配置，避免与 mixed-port 冲突 ──
         for key in ("port", "socks-port", "redir-port", "tproxy-port"):
@@ -208,10 +209,11 @@ def patch_config(config: ProxyConfig, config_file: Path) -> None:
 
         # ── 6. DNS 安全配置 ──
         if "dns" in data and isinstance(data["dns"], dict):
-            dns_listen = str(data["dns"].get("listen", ""))
+            dns_config = cast(Dict[str, Any], data["dns"])
+            dns_listen = str(dns_config.get("listen", ""))
             # 避免绑定 0.0.0.0:53 (需要 root 且与系统 DNS 冲突)
             if dns_listen and ":53" in dns_listen and "1053" not in dns_listen:
-                data["dns"]["listen"] = "127.0.0.1:1053"
+                dns_config["listen"] = "127.0.0.1:1053"
 
         # ── 7. API 认证 ──
         if config.api_secret:

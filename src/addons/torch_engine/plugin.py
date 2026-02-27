@@ -4,7 +4,6 @@ Torch Engine Addon - PyTorch CUDA 环境装配
 import sys
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
-from src.core.schema import StateKey
 from src.core.utils import logger
 
 
