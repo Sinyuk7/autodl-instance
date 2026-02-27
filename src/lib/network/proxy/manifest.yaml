@@ -1,0 +1,24 @@
+# 代理内核配置 - 技术参数
+# 公开技术参数，可安全提交到 Git
+# 订阅地址等敏感信息请配置在 secrets.yaml 中
+
+# ── 内核配置 ──────────────────────────────────────────────
+# 代理后端类型 (当前支持: mihomo)
+backend: mihomo
+
+# mihomo 内核版本 (GitHub Release tag)
+mihomo_version: "v1.19.20"
+
+# ── 端口配置 ──────────────────────────────────────────────
+# 本地 HTTP/SOCKS5 混合代理端口
+proxy_port: 7890
+
+# mihomo RESTful API 端口 (节点切换、延迟测试)
+api_port: 9090
+
+# ── 路径配置 ──────────────────────────────────────────────
+# 内核安装路径
+install_dir: /usr/local/bin
+
+# 配置文件目录
+config_dir: /etc/mihomo

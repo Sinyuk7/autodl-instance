@@ -45,6 +45,9 @@ def create_pipeline() -> List[BaseAddon]:
     5. userdata     - 用户数据软链接 → 依赖 comfy_dir
     6. nodes        - 节点管理 → 依赖 comfy_dir, user_dir
     7. models       - 模型管理 → 依赖 comfy_dir
+    
+    注意: 代理服务（turbo / mihomo）在 setup_network() 中已初始化，
+    不作为 pipeline 插件，因为所有插件都依赖网络。
     """
     return [
         SystemAddon(),
@@ -189,7 +192,7 @@ def main() -> None:
     # 清理残留进程
     kill_process_by_name("python.*src.main", exclude_pid=os.getpid())
 
-    # 生产模式下初始化网络环境 (AutoDL 学术加速)
+    # 初始化网络环境 (代理 + 镜像 + Token)
     setup_network()
 
     # 创建上下文并执行

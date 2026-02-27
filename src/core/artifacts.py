@@ -53,6 +53,10 @@ class Artifacts:
     torch_installed: bool = False
     cuda_version: Optional[str] = None
 
+    # ==================== Network/Proxy ====================
+    proxy_url: Optional[str] = None          # http://127.0.0.1:7890
+    proxy_api_url: Optional[str] = None      # http://127.0.0.1:9090
+
     def save(self, project_root: Path) -> None:
         """
         保存 artifacts 到 JSON 文件。

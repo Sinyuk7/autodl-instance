@@ -11,7 +11,7 @@ from pathlib import Path
 
 from src.main import create_context, execute, BASE_DIR
 from src.core.utils import logger, setup_logger
-from src.lib.network import setup_network
+from src.lib.network import setup_network, stop_proxy
 
 
 def main() -> None:
@@ -36,6 +36,9 @@ def main() -> None:
     # 执行 sync 动作 (execute 内部会自动逆序执行)
     execute("sync", context)
     
+    # 停止代理进程（如果有 mihomo 在运行）
+    stop_proxy()
+
     logger.info("\n" + "=" * 50)
     logger.info("✅ 同步完成！您可以安全关闭机器了。")
     logger.info("=" * 50)

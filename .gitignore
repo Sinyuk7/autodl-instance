@@ -87,6 +87,7 @@ env.yaml
 # 敏感 manifest 文件 (含 API Key / SSH Key 等)
 src/addons/git_config/manifest.yaml
 src/lib/download/secrets.yaml
+src/lib/network/proxy/secrets.yaml
 
 # 运行时状态 (跨进程共享的 artifacts)
 .artifacts.json
