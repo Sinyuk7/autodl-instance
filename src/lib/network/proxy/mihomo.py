@@ -248,27 +248,35 @@ class MihomoBackend(ProxyBackend):
     def health_check(self) -> bool:
         """通过代理验证连通性
 
-        使用 Cloudflare generate_204，比 Google 更快更稳定。
+        依次尝试多个测试端点，任一通过即可。
+        优先使用 Google generate_204（最能代表代理是否真正工作），
+        然后 Cloudflare，最后 Gstatic。
         """
         if not self.is_running():
             return False
 
-        try:
-            proxy_handler = urllib.request.ProxyHandler({
-                "http": self.config.proxy_url,
-                "https": self.config.proxy_url,
-            })
-            opener = urllib.request.build_opener(proxy_handler)
+        test_urls = [
+            "https://www.google.com/generate_204",
+            "https://cp.cloudflare.com/generate_204",
+            "http://connectivitycheck.gstatic.com/generate_204",
+        ]
 
-            req = urllib.request.Request(
-                "https://cp.cloudflare.com/generate_204",
-                method="GET",
-            )
-            resp = opener.open(req, timeout=10)
-            return resp.status in (200, 204)
+        proxy_handler = urllib.request.ProxyHandler({
+            "http": self.config.proxy_url,
+            "https": self.config.proxy_url,
+        })
+        opener = urllib.request.build_opener(proxy_handler)
 
-        except Exception:
-            return False
+        for url in test_urls:
+            try:
+                req = urllib.request.Request(url, method="GET")
+                resp = opener.open(req, timeout=10)
+                if resp.status in (200, 204):
+                    return True
+            except Exception:
+                continue
+
+        return False
 
     # ── Helpers ─────────────────────────────────────────
 

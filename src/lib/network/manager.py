@@ -156,7 +156,7 @@ class NetworkManager:
         # 健康检查
         if backend.health_check():
             if verbose:
-                logger.info("  -> ✓ mihomo 代理连通性测试通过 (Google 204)")
+                logger.info("  -> ✓ mihomo 代理连通性测试通过")
         else:
             if verbose:
                 logger.warning("  -> [WARN] mihomo 连通性测试未通过，但进程已启动")

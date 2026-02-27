@@ -10,18 +10,23 @@ from pathlib import Path
 from typing import Optional
 
 
-def setup_logger(log_file: Path) -> logging.Logger:
-    """配置全局日志，终端输出 INFO，文件输出 DEBUG"""
+def setup_logger(log_file: Path, debug: bool = False) -> logging.Logger:
+    """配置全局日志，终端输出 INFO（debug 模式输出 DEBUG），文件输出 DEBUG"""
     _logger = logging.getLogger("autodl_setup")
     _logger.setLevel(logging.DEBUG)
     
     # 避免重复添加 handler
     if _logger.handlers:
+        # 如果 debug 模式，更新已有 console handler 的级别
+        if debug:
+            for h in _logger.handlers:
+                if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                    h.setLevel(logging.DEBUG)
         return _logger
 
-    # 终端 Handler (INFO 级别，清爽输出)
+    # 终端 Handler (INFO 级别，debug 模式输出 DEBUG)
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG if debug else logging.INFO)
     console_formatter = logging.Formatter("%(message)s")
     console_handler.setFormatter(console_formatter)
 

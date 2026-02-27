@@ -185,9 +185,9 @@ def main() -> None:
     parser.add_argument("--only", type=str, help="只执行指定插件（危险模式）")
     args = parser.parse_args()
 
-    # 初始化日志
+    # 初始化日志（必须在所有其他操作之前）
     log_file = BASE_DIR / "autodl-setup.log"
-    setup_logger(log_file)
+    setup_logger(log_file, debug=args.debug)
 
     # 清理残留进程
     kill_process_by_name("python.*src.main", exclude_pid=os.getpid())
