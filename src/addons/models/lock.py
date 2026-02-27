@@ -19,6 +19,7 @@ EXCLUDED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp",
     ".html", ".css", ".js",
     ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+    ".lock", ".metadata",  # 下载缓存的锁文件和元数据
     ".meta",  # sidecar 元数据文件
 }
 
@@ -73,6 +74,10 @@ def scan_models(models_base: Path) -> List[Dict[str, Any]]:
             continue
         # 跳过隐藏文件 (如 .meta sidecar)
         if model_file.name.startswith("."):
+            continue
+        # 跳过隐藏目录下的文件 (如 .cache/)
+        rel_parts = model_file.relative_to(models_base).parts
+        if any(part.startswith(".") for part in rel_parts[:-1]):
             continue
         # 跳过已知的非模型文件
         if model_file.suffix.lower() in EXCLUDED_EXTENSIONS:
