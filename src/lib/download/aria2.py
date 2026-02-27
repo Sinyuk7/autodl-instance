@@ -2,6 +2,12 @@
 Aria2 多线程下载策略
 
 适用于 CivitAI、直链以及 HuggingFace 的非 Hub 场景
+
+文件管理说明 (基于 aria2 官方文档):
+- .aria2 控制文件: 与下载文件同目录，用于断点续传，下载完成后自动删除
+- --disk-cache: 是内存缓存，不产生磁盘文件
+- dht.dat: DHT 路由表，仅 BT 下载使用，我们不涉及
+- session 文件: 需要 --save-session 才会产生，我们不使用
 """
 import logging
 import os
@@ -10,6 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from src.core.schema import EnvKey
 
@@ -19,47 +26,46 @@ from src.lib.download.base import CacheEntry, DownloadStrategy, PurgeResult
 
 logger = logging.getLogger("autodl_setup")
 
-# Aria2 下载临时文件目录
-_ARIA2_TMP_DIR = Path("/tmp") / "aria2"
-
-
-def _calc_dir_size(path: Path) -> int:
-    """递归计算目录大小（字节），路径不存在返回 0"""
-    if not path.exists():
-        return 0
-    total = 0
-    try:
-        for f in path.rglob("*"):
-            if f.is_file():
-                try:
-                    total += f.stat().st_size
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return total
-
 
 class Aria2Strategy(DownloadStrategy):
     """Aria2 多线程下载策略
     
-    配置段 (download.yaml → download.aria2):
-        connections:    每服务器最大连接数（默认 32）
-        split_size:     分片大小 MB（默认 5）
-        max_retries:    最大重试次数（默认 5）
-        timeout:        超时秒数（默认 30）
-        disk_cache:     磁盘缓存 MB（默认 64）
-        file_allocation: 文件预分配方式（默认 none）
+    配置段 (manifest.yaml → aria2):
+        connections:        每服务器最大连接数（默认 16，aria2 上限）
+        split_size:         最小分片大小 MB（默认 5）
+        max_retries:        最大重试次数（默认 5）
+        timeout:            传输超时秒数（默认 30）
+        connect_timeout:    连接超时秒数（默认 10）
+        retry_wait:         重试等待秒数（默认 3）
+        disk_cache:         磁盘缓存 MB（默认 64）
+        file_allocation:    文件预分配方式（默认 none）
+        lowest_speed_limit: 最低速度限制（默认 1K）
+        max_file_not_found: 文件找不到最大重试次数（默认 2）
+        uri_selector:       URI 选择算法（默认 adaptive）
+        piece_length:       分片长度（默认 1M）
+    
+    文档: https://aria2.github.io/manual/en/html/aria2c.html
     """
 
     def __init__(self) -> None:
         cfg = self._load_config()
+        # 连接与分片
         self._connections     = min(cfg.get("connections", 16), 16)  # aria2 上限 16
         self._split_size      = cfg.get("split_size", 5)
+        self._piece_length    = cfg.get("piece_length", "1M")
+        # 重试与超时
         self._max_retries     = cfg.get("max_retries", 5)
         self._timeout         = cfg.get("timeout", 30)
+        self._connect_timeout = cfg.get("connect_timeout", 10)
+        self._retry_wait      = cfg.get("retry_wait", 3)
+        self._max_file_not_found = cfg.get("max_file_not_found", 2)
+        # 速度限制
+        self._lowest_speed_limit = cfg.get("lowest_speed_limit", "1K")
+        # 磁盘与缓存
         self._disk_cache      = cfg.get("disk_cache", 64)
         self._file_allocation = cfg.get("file_allocation", "none")
+        # URI 选择
+        self._uri_selector    = cfg.get("uri_selector", "adaptive")
 
     @staticmethod
     def _load_config() -> Dict[str, Any]:
@@ -131,6 +137,47 @@ class Aria2Strategy(DownloadStrategy):
         """用户中断时保留 .aria2 控制文件（支持断点续传）"""
         pass  # aria2 自身支持断点续传，中断时无需清理
 
+    # ── 辅助方法 ────────────────────────────────────────────
+
+    @staticmethod
+    def _is_huggingface_url(url: str, hf_endpoint: str) -> bool:
+        """判断 URL 是否为 HuggingFace 或其镜像站
+        
+        Args:
+            url: 待检查的 URL
+            hf_endpoint: HF_ENDPOINT 环境变量值（镜像站地址）
+            
+        Returns:
+            True 如果 URL 属于 HuggingFace 或其镜像站
+        """
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        
+        # 原始 HuggingFace 域名
+        if host == "huggingface.co" or host.endswith(".huggingface.co"):
+            return True
+        
+        # 镜像站域名
+        if hf_endpoint:
+            mirror_parsed = urlparse(hf_endpoint)
+            mirror_host = (mirror_parsed.hostname or "").lower()
+            if mirror_host and (host == mirror_host or host.endswith(f".{mirror_host}")):
+                return True
+        
+        return False
+
+    def _log_proxy_settings(self) -> None:
+        """记录当前代理设置（用于调试）"""
+        proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")
+        no_proxy = os.environ.get("no_proxy") or os.environ.get("NO_PROXY")
+        
+        if proxy:
+            logger.info(f"  -> [aria2] 代理: {proxy}")
+            if no_proxy:
+                logger.debug(f"  -> [aria2] 不代理: {no_proxy}")
+        else:
+            logger.debug("  -> [aria2] 未配置代理")
+
     # ── 核心下载 ────────────────────────────────────────────
 
     def download(self, url: str, target_path: Path, dry_run: bool = False) -> bool:
@@ -146,26 +193,44 @@ class Aria2Strategy(DownloadStrategy):
         # 生命周期由 Manager 统一编排，这里只做纯下载
         cmd: list[str] = [
             "aria2c",
+            # === 连接与分片 ===
             "--max-connection-per-server", str(self._connections),
             "--split",                     str(self._connections),
             "--min-split-size",            f"{self._split_size}M",
+            "--piece-length",              self._piece_length,
+            # === 重试与超时 ===
             "--max-tries",                 str(self._max_retries),
             "--timeout",                   str(self._timeout),
-            "--connect-timeout",           "10",
-            "--retry-wait",                "3",
+            "--connect-timeout",           str(self._connect_timeout),
+            "--retry-wait",                str(self._retry_wait),
+            "--max-file-not-found",        str(self._max_file_not_found),
+            # === 速度限制 ===
+            "--lowest-speed-limit",        self._lowest_speed_limit,
+            # === 磁盘与缓存 ===
             "--disk-cache",                f"{self._disk_cache}M",
             "--file-allocation",           self._file_allocation,
+            # === 断点续传与覆盖 ===
             "--continue=true",
             "--auto-file-renaming=false",
             "--allow-overwrite=true",
+            # === 日志与输出（保持静默） ===
             "--console-log-level=warn",
             "--summary-interval=0",
             "--download-result=hide",
+            # === 性能优化 ===
             "--optimize-concurrent-downloads=true",
             "--stream-piece-selector=geom",
+            "--uri-selector",              self._uri_selector,
+            "--async-dns=true",
+            "--enable-http-keep-alive=true",
+            "--http-accept-gzip=true",
+            # === 目标路径 ===
             "--dir", str(target_path.parent),
             "--out", target_path.name,
         ]
+
+        # 记录代理设置
+        self._log_proxy_settings()
 
         # CivitAI Token
         if "civitai.com" in url:
@@ -173,16 +238,22 @@ class Aria2Strategy(DownloadStrategy):
             if token:
                 separator = "&" if "?" in url else "?"
                 url = f"{url}{separator}token={token}"
+            else:
+                logger.debug("  -> [aria2] CivitAI Token 未配置，部分模型可能无法下载")
 
         # HuggingFace: 替换为镜像站 + 注入 Token
         hf_endpoint = os.environ.get("HF_ENDPOINT", "")
         if "huggingface.co" in url and hf_endpoint and "huggingface.co" not in hf_endpoint:
             url = url.replace("https://huggingface.co", hf_endpoint)
             logger.info(f"  -> [aria2] 使用镜像站: {hf_endpoint}")
-        if "huggingface.co" in url or (hf_endpoint and hf_endpoint.split("//")[-1] in url):
+        
+        # 使用精确的域名匹配判断是否需要注入 HF Token
+        if self._is_huggingface_url(url, hf_endpoint):
             hf_token = os.environ.get(ENV_HF_TOKEN)
             if hf_token:
                 cmd += ["--header", f"Authorization: Bearer {hf_token}"]
+            else:
+                logger.debug("  -> [aria2] HuggingFace Token 未配置，部分模型可能无法下载")
 
         cmd.append(url)
 
@@ -200,26 +271,75 @@ class Aria2Strategy(DownloadStrategy):
             return False
 
     # ── 缓存管理 ─────────────────────────────────────────────
+    #
+    # aria2 不产生持久化缓存目录:
+    # - --disk-cache 是内存缓存，进程结束即释放
+    # - .aria2 控制文件与下载文件同目录，用于断点续传
+    #
+    # purge_cache() 提供搜索并清理残留 .aria2 控制文件的能力
 
     def cache_info(self) -> List[CacheEntry]:
-        """返回 aria2 临时目录的缓存条目"""
-        return [
-            CacheEntry(
-                name="Aria2 临时文件",
-                path=_ARIA2_TMP_DIR,
-                size_bytes=_calc_dir_size(_ARIA2_TMP_DIR),
-                exists=_ARIA2_TMP_DIR.exists(),
-            )
-        ]
+        """aria2 无持久化缓存目录，返回空列表
+        
+        说明:
+        - --disk-cache 是内存缓存，不产生磁盘文件
+        - .aria2 控制文件位置不固定（与下载文件同目录），不适合在此报告
+        """
+        return []
 
     def purge_cache(self, pattern: Optional[str] = None) -> List[PurgeResult]:
-        """清理 aria2 临时目录（不支持 pattern，全量清理）"""
-        if not _ARIA2_TMP_DIR.exists():
+        """搜索并清理残留的 .aria2 控制文件
+        
+        Args:
+            pattern: 搜索目录路径（glob 模式），如 "/root/autodl-tmp/*"
+                     默认搜索常见下载目录
+        
+        Returns:
+            清理结果列表
+            
+        说明:
+            .aria2 控制文件是断点续传的依据，正常情况下载完成后会自动删除。
+            此方法用于清理异常中断后残留的控制文件。
+        """
+        # 默认搜索目录
+        default_dirs = [
+            Path("/root/autodl-tmp"),
+            Path("/root/autodl-fs"),
+            Path.home() / "Downloads",
+        ]
+        
+        search_dirs: List[Path] = []
+        if pattern:
+            # 支持 glob 模式，如 "/data/*" 展开为实际目录
+            for p in Path("/").glob(pattern.lstrip("/")):
+                if p.is_dir():
+                    search_dirs.append(p)
+            # 如果 pattern 本身是目录
+            pattern_path = Path(pattern)
+            if pattern_path.is_dir() and pattern_path not in search_dirs:
+                search_dirs.append(pattern_path)
+        else:
+            search_dirs = [d for d in default_dirs if d.exists()]
+        
+        if not search_dirs:
             return []
-        size = _calc_dir_size(_ARIA2_TMP_DIR)
-        try:
-            shutil.rmtree(_ARIA2_TMP_DIR)
-            return [PurgeResult(str(_ARIA2_TMP_DIR), size, True)]
-        except OSError as e:
-            return [PurgeResult(str(_ARIA2_TMP_DIR), 0, False, str(e))]
+        
+        results: List[PurgeResult] = []
+        for search_dir in search_dirs:
+            try:
+                # 搜索 .aria2 控制文件
+                for ctrl_file in search_dir.rglob("*.aria2"):
+                    if not ctrl_file.is_file():
+                        continue
+                    try:
+                        size = ctrl_file.stat().st_size
+                        ctrl_file.unlink()
+                        results.append(PurgeResult(str(ctrl_file), size, True))
+                        logger.debug(f"  -> [aria2] 已清理控制文件: {ctrl_file}")
+                    except OSError as e:
+                        results.append(PurgeResult(str(ctrl_file), 0, False, str(e)))
+            except OSError as e:
+                logger.debug(f"  -> [aria2] 搜索目录失败 {search_dir}: {e}")
+        
+        return results
 

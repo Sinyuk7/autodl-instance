@@ -153,3 +153,4 @@ bin/
 bin
 
 my-comfyui-backup/
+src/lib/download/docs

@@ -1,23 +1,36 @@
+# ============================================================
 # 下载器配置 - aria2
 # 公开技术参数，可安全提交到 Git
 # API 密钥请配置在 secrets.yaml 中
+# 文档: https://aria2.github.io/manual/en/html/aria2c.html
+# ============================================================
 
-# ===========================================
-# aria2 多线程下载配置
-# ===========================================
 aria2:
-  # 每服务器最大连接数 (aria2 上限为 16)
-  connections: 16
-  # 分片大小 (MB)，小分片可更快启动并行
-  split_size: 5
-  # 最大重试次数
-  max_retries: 5
-  # 超时时间 (秒)，快速失败重试
-  timeout: 30
-  # 磁盘缓存 (MB)，减少磁盘 IO
-  disk_cache: 64
-  # 文件预分配方式: none/falloc/prealloc
-  # none: 不预分配，启动最快
-  # falloc: 快速预分配(ext4/xfs)，推荐 SSD
-  file_allocation: none
+  # === 连接与分片 ===
+  connections: 16        # 每服务器最大连接数 (aria2 硬编码上限为 16)
+  split_size: 5          # 最小分片大小 (MB)，小于 2*split_size 的文件不会被分割
+  piece_length: "1M"     # 分片长度，影响并行请求粒度
 
+  # === 重试与超时 ===
+  max_retries: 5         # 最大重试次数，0 表示无限重试
+  timeout: 30            # 传输超时 (秒)，超时后断开连接重试
+  connect_timeout: 10    # 连接超时 (秒)，快速检测不可达服务器
+  retry_wait: 3          # 重试等待 (秒)，用于 503 等可重试错误
+  max_file_not_found: 2  # 文件找不到最大重试次数，避免死循环
+
+  # === 速度限制 ===
+  lowest_speed_limit: "1K"  # 最低速度限制，低于此速度断开连接重试更快的源
+
+  # === 磁盘与缓存 ===
+  disk_cache: 64         # 磁盘缓存 (MB)，减少磁盘 IO
+  file_allocation: none  # 文件预分配方式:
+                         #   none    - 不预分配，启动最快，适合 Docker overlay (推荐)
+                         #   falloc  - 快速预分配，适合原生 SSD + ext4/xfs
+                         #   prealloc - 完整预分配，最慢
+                         #   trunc   - 仅设置文件长度元数据，不实际分配
+
+  # === URI 选择 ===
+  uri_selector: adaptive  # URI 选择算法:
+                          #   inorder  - 按顺序尝试
+                          #   feedback - 根据历史速度选择最快
+                          #   adaptive - 智能选择 (推荐)

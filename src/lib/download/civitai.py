@@ -3,6 +3,7 @@ CivitAI API 工具
 
 参考 comfy-cli 实现，增强错误处理和类型推断
 """
+import logging
 import os
 from typing import Any, Dict, Optional, Tuple, TypedDict
 from urllib.parse import parse_qs, urlparse
@@ -13,6 +14,8 @@ from src.core.schema import EnvKey
 
 ENV_CIVITAI_TOKEN = EnvKey.CIVITAI_API_TOKEN
 from src.lib.ui import print_warning
+
+logger = logging.getLogger("autodl_setup")
 
 
 # CivitAI 模型类型 -> ComfyUI 目录映射
@@ -36,6 +39,15 @@ CIVITAI_TYPE_MAP = {
 def get_api_token() -> Optional[str]:
     """获取 CivitAI API Token"""
     return os.environ.get(ENV_CIVITAI_TOKEN)
+
+
+def _log_request_context() -> None:
+    """记录 API 请求上下文（代理状态等）"""
+    proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")
+    if proxy:
+        logger.debug(f"  -> [CivitAI API] 使用代理: {proxy}")
+    else:
+        logger.debug("  -> [CivitAI API] 未配置代理")
 
 
 class CivitaiUrlInfo(TypedDict):
@@ -135,6 +147,9 @@ def fetch_model_info_by_version(version_id: int) -> Optional[Dict[str, Any]]:
             "size_kb": int,
         }
     """
+    # 记录请求上下文
+    _log_request_context()
+    
     headers = {"Content-Type": "application/json"}
     token = get_api_token()
     if token:
@@ -187,6 +202,9 @@ def fetch_model_info(model_id: int, version_id: Optional[int] = None) -> Optiona
     Returns:
         同 fetch_model_info_by_version
     """
+    # 记录请求上下文
+    _log_request_context()
+    
     headers = {"Content-Type": "application/json"}
     token = get_api_token()
     if token:
