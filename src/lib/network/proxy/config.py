@@ -65,6 +65,20 @@ def _download_with_curl(url: str, dest: Path, ua: str = _DEFAULT_UA) -> bool:
             dest.unlink(missing_ok=True)
             return False
 
+        # 检查是否下载到了 HTML 错误页面（如 Cloudflare 拦截页）
+        # 真正的 Clash 订阅配置是 YAML 格式，不会以 < 开头
+        try:
+            head = dest.read_bytes()[:512]
+            head_str = head.decode("utf-8", errors="ignore").strip().lower()
+            if head_str.startswith("<!doctype") or head_str.startswith("<html") or "<head>" in head_str:
+                logger.debug(
+                    f"  -> curl 下载到的是 HTML 页面 (可能是 Cloudflare 拦截)，非 YAML 配置"
+                )
+                dest.unlink(missing_ok=True)
+                return False
+        except Exception:
+            pass
+
         return True
 
     except Exception as e:
@@ -77,9 +91,10 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
     """下载/更新 Clash 订阅配置
 
     下载策略 (按优先级):
-    1. curl 直连 — TLS 指纹兼容性最好，绕过 Cloudflare 检测
-    2. curl 通过 noproxy — 明确不走系统代理
-    3. 如果有旧配置 — 复用旧配置继续
+    1. 如果 subscription_url 为空 — 使用本地已有配置 (手动上传模式)
+    2. curl 直连 — TLS 指纹兼容性最好，绕过 Cloudflare 检测
+    3. curl 换 UA 重试 — 部分机场对特定 UA 有偏好
+    4. 如果有旧配置 — 复用旧配置继续
 
     Args:
         config: 代理配置
@@ -89,12 +104,24 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
         True 表示配置更新成功
     """
     url = config.subscription_url
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # ── 手动上传模式：subscription_url 为空时使用已有配置 ──
     if not url:
-        logger.error("  -> ✗ 未配置订阅地址 (subscription_url)")
-        return False
+        if config_file.exists() and config_file.stat().st_size > 100:
+            logger.info(
+                f"  -> 未配置 subscription_url，使用本地配置: {config_file}"
+            )
+            patch_config(config, config_file)
+            return True
+        else:
+            logger.error(
+                f"  -> ✗ 未配置 subscription_url，且本地配置不存在: {config_file}\n"
+                f"     请手动上传 Clash 配置到 {config_file}，或在 secrets.yaml 中填写订阅地址"
+            )
+            return False
 
     logger.info("  -> 正在更新订阅配置...")
-    config_file.parent.mkdir(parents=True, exist_ok=True)
 
     # 策略 1: curl 下载（TLS 指纹兼容性好，能绕过 Cloudflare 等 WAF）
     if _download_with_curl(url, config_file, ua=_DEFAULT_UA):
@@ -110,15 +137,21 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
         logger.info(f"  -> ✓ 订阅配置已更新: {config_file}")
         return True
 
-    # 所有策略都失败了
-    logger.error(f"  -> ✗ 订阅更新失败")
+    # 所有在线策略都失败了
+    logger.warning(f"  -> ✗ 订阅在线更新失败 (可能被机场 CDN 拦截)")
 
     # 如果已有旧配置，复用继续
-    if config_file.exists() and config_file.stat().st_size > 0:
-        logger.info("  -> 检测到已有订阅配置，将使用旧配置继续")
+    if config_file.exists() and config_file.stat().st_size > 100:
+        logger.info(
+            "  -> 检测到已有本地配置，将使用旧配置继续\n"
+            "     提示: 你也可以在本地下载配置后手动上传到 /etc/mihomo/config.yaml"
+        )
         patch_config(config, config_file)
         return True
 
+    logger.error(
+        f"  -> ✗ 无可用配置。请手动上传 Clash 配置到 {config_file}"
+    )
     return False
 
 

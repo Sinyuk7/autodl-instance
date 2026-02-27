@@ -21,6 +21,6 @@ Network Environment Manager - 网络环境统一管理
 - src/addons/system/manifest.yaml       (镜像配置)
 - src/lib/download/secrets.yaml         (API Token)
 """
-from src.lib.network.manager import setup_network, export_env_shell, stop_proxy
+from src.lib.network.manager import setup_network, export_env_shell, stop_proxy, sync_proxy_config
 
-__all__ = ["setup_network", "export_env_shell", "stop_proxy"]
+__all__ = ["setup_network", "export_env_shell", "stop_proxy", "sync_proxy_config"]

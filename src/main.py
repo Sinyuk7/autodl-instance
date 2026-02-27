@@ -14,7 +14,7 @@ from src.core.interface import AppContext, BaseAddon
 from src.core.adapters import SubprocessRunner, FileStateManager
 from src.core.artifacts import Artifacts
 from src.core.utils import setup_logger, logger, kill_process_by_name
-from src.lib.network import setup_network
+from src.lib.network import setup_network, sync_proxy_config
 
 # 插件导入
 from src.addons.system.plugin import SystemAddon
@@ -199,6 +199,12 @@ def main() -> None:
     # start/sync 需要加载 setup 阶段持久化的 artifacts
     load_artifacts = args.action in ("start", "sync")
     context = create_context(debug=args.debug, load_artifacts=load_artifacts)
+
+    # sync 阶段：先将 mihomo 运行时配置同步回持久化目录
+    # 必须在 execute 之前，因为 userdata addon 的 sync 会 git add . && push
+    if args.action == "sync":
+        sync_proxy_config()
+
     execute(args.action, context, until=args.until, only=args.only)
 
 
