@@ -6,8 +6,8 @@
 # aria2 多线程下载配置
 # ===========================================
 aria2:
-  # 并发连接数 (AutoDL 高带宽建议 32)
-  connections: 32
+  # 每服务器最大连接数 (aria2 上限为 16)
+  connections: 16
   # 分片大小 (MB)，小分片可更快启动并行
   split_size: 5
   # 最大重试次数
@@ -26,6 +26,16 @@ aria2:
 # ===========================================
 hf_hub:
   enabled: true
+  # HuggingFace URL 的下载策略
+  # - "hf_hub":  使用 huggingface_hub 库 + Xet 协议（默认，支持断点续传和版本缓存）
+  # - "aria2":   使用 aria2 多线程 HTTP 下载（绕过 Xet 协议，适合镜像站/代理兼容性差的场景）
+  # 当镜像站对 Xet 格式没有 CDN 缓存、或学术加速代理与 Xet 冲突时，建议切换为 aria2
+  prefer_strategy: "hf_hub"
+  # 是否启用 Xet 协议 (chunk-based 去重加速)
+  # - true:  使用 hf_xet 下载，海外直连/代理场景最优
+  # - false: 回退传统 HTTP 下载，国内镜像站 CDN 缓存可命中，速度更快
+  # 如果使用 hf-mirror.com 且速度慢 (镜像站未缓存 Xet 格式)，建议设为 false
+  xet_enabled: true
   # 开启 Xet 高性能模式 (替代原 hf_transfer，榨干带宽和 CPU)
   xet_high_performance: true
   # Xet Chunk Cache 大小 (MB)

@@ -54,7 +54,7 @@ class Aria2Strategy(DownloadStrategy):
 
     def __init__(self) -> None:
         cfg = self._load_config()
-        self._connections     = cfg.get("connections", 32)
+        self._connections     = min(cfg.get("connections", 16), 16)  # aria2 上限 16
         self._split_size      = cfg.get("split_size", 5)
         self._max_retries     = cfg.get("max_retries", 5)
         self._timeout         = cfg.get("timeout", 30)
@@ -158,7 +158,7 @@ class Aria2Strategy(DownloadStrategy):
             "--continue=true",
             "--auto-file-renaming=false",
             "--allow-overwrite=true",
-            "--console-log-level=notice",
+            "--console-log-level=warn",
             "--summary-interval=5",
             "--optimize-concurrent-downloads=true",
             "--stream-piece-selector=geom",
@@ -173,8 +173,12 @@ class Aria2Strategy(DownloadStrategy):
                 separator = "&" if "?" in url else "?"
                 url = f"{url}{separator}token={token}"
 
-        # HuggingFace Token（aria2 作为 fallback 时）
-        if "huggingface.co" in url:
+        # HuggingFace: 替换为镜像站 + 注入 Token
+        hf_endpoint = os.environ.get("HF_ENDPOINT", "")
+        if "huggingface.co" in url and hf_endpoint and "huggingface.co" not in hf_endpoint:
+            url = url.replace("https://huggingface.co", hf_endpoint)
+            logger.info(f"  -> [aria2] 使用镜像站: {hf_endpoint}")
+        if "huggingface.co" in url or (hf_endpoint and hf_endpoint.split("//")[-1] in url):
             hf_token = os.environ.get(ENV_HF_TOKEN)
             if hf_token:
                 cmd += ["--header", f"Authorization: Bearer {hf_token}"]

@@ -23,7 +23,7 @@ class DownloadManager:
     """下载管理器 - 根据 URL 自动选择最佳策略
 
     策略优先级:
-      1. HuggingFace URL → HuggingFaceHubStrategy（hf_xet 自动加速）
+      1. HuggingFace URL → 由 prefer_strategy 配置决定（默认 hf_hub）
       2. 所有 URL       → Aria2Strategy（多线程）
     """
 
@@ -31,6 +31,9 @@ class DownloadManager:
         # 各策略自行加载配置，manager 只负责组装
         self._hf_strategy    = HuggingFaceHubStrategy()
         self._aria2_strategy = Aria2Strategy()
+
+        # 读取 HF URL 的首选策略
+        self._hf_prefer = self._hf_strategy._load_config().get("prefer_strategy", "hf_hub")
 
         # 所有策略列表，供缓存聚合使用
         self._all_strategies: List[DownloadStrategy] = [
@@ -57,11 +60,19 @@ class DownloadManager:
     # ── 策略选择 ─────────────────────────────────────────────
 
     def get_strategy(self, url: str) -> DownloadStrategy:
-        """根据 URL 选择最佳下载策略"""
+        """根据 URL 选择最佳下载策略
+
+        HuggingFace URL 的策略由 manifest.yaml 中 hf_hub.prefer_strategy 决定:
+          - "hf_hub": 使用 huggingface_hub 库 + Xet（默认）
+          - "aria2":  使用 aria2 多线程 HTTP 下载（绕过 Xet）
+        """
         url_type = detect_url_type(url)
 
-        if url_type == "huggingface" and self._hf_strategy.is_available():
-            return self._hf_strategy
+        if url_type == "huggingface":
+            if self._hf_prefer == "aria2" and self._aria2_strategy.is_available():
+                return self._aria2_strategy
+            if self._hf_strategy.is_available():
+                return self._hf_strategy
 
         if self._aria2_strategy.is_available():
             return self._aria2_strategy

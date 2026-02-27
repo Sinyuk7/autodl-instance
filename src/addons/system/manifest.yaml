@@ -15,4 +15,5 @@ pypi_mirror: "https://mirrors.aliyun.com/pypi/simple"
 # ===========================================
 # 使用国内镜像加速 HuggingFace 下载，避免官方服务器限流
 # 设置 HF_ENDPOINT 环境变量，huggingface_hub 会自动使用
+# 注意: 下载策略会自动将镜像站域名加入 no_proxy，避免与代理冲突
 huggingface_mirror: "https://hf-mirror.com"

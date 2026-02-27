@@ -17,9 +17,13 @@ Model Manager - ComfyUI 模型管理 CLI (交互式)
     model cache clear-model <repo_id>       # 清理指定模型缓存
 """
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import List, Optional
+
+# 确保 autodl_setup logger 有 handler（独立 CLI 运行时未经 main.py 初始化）
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 # 初始化网络环境 (加载代理、镜像、API Token)
 from src.lib.network import setup_network

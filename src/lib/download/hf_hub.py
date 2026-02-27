@@ -62,6 +62,7 @@ class HuggingFaceHubStrategy(DownloadStrategy):
     def __init__(self) -> None:
         cfg = self._load_config()
         self._enabled = cfg.get("enabled", True)
+        self._xet_enabled = cfg.get("xet_enabled", True)
         self._xet_high_performance = cfg.get("xet_high_performance", True)
         self._xet_chunk_cache_mb = cfg.get("xet_chunk_cache_mb", 0)
         self._xet_write_sequentially = cfg.get("xet_write_sequentially", False)
@@ -113,7 +114,10 @@ class HuggingFaceHubStrategy(DownloadStrategy):
             logger.error("  -> [hf_hub] huggingface_hub 未安装，请先安装。")
             return False
             
-        self._ensure_hf_xet()
+        if self._xet_enabled:
+            self._ensure_hf_xet()
+        else:
+            logger.info("  -> [hf_hub] Xet 协议已禁用，使用传统 HTTP 下载")
         return True
 
     def _ensure_hf_xet(self) -> None:
@@ -145,7 +149,14 @@ class HuggingFaceHubStrategy(DownloadStrategy):
         if self._etag_timeout:
             os.environ["HF_HUB_ETAG_TIMEOUT"] = str(self._etag_timeout)
         
-        # 2. 注入 Xet 环境变量
+        # 2. Xet 开关
+        if not self._xet_enabled:
+            os.environ["HF_HUB_DISABLE_XET"] = "1"
+            return  # 跳过所有 Xet 环境变量
+        else:
+            os.environ.pop("HF_HUB_DISABLE_XET", None)
+        
+        # 3. 注入 Xet 环境变量
         if self._xet_high_performance:
             os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
         if self._xet_chunk_cache_mb > 0:
@@ -221,7 +232,6 @@ class HuggingFaceHubStrategy(DownloadStrategy):
             "repo_id":    repo_id,
             "filename":   filename,
             "local_dir":  local_dir,
-            "local_dir_use_symlinks": False,
         }
         if revision:
             download_kwargs["revision"] = revision
@@ -255,7 +265,11 @@ class HuggingFaceHubStrategy(DownloadStrategy):
         if is_mirror:
             logger.info(f"  -> [hf_hub] 镜像站: {hf_endpoint}")
         else:
-            logger.info(f"  -> [hf_hub] 端点: {hf_endpoint} (官方)")
+            active_proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") or ""
+            if active_proxy:
+                logger.info(f"  -> [hf_hub] 端点: {hf_endpoint} (官方 + 代理加速)")
+            else:
+                logger.info(f"  -> [hf_hub] 端点: {hf_endpoint} (官方直连)")
         logger.info(f"  -> [hf_hub] 下载: {repo_id} / {filename}")
 
         try:
