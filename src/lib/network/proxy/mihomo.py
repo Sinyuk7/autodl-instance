@@ -133,12 +133,22 @@ class MihomoBackend(ProxyBackend):
             self._pid_file.write_text(str(process.pid))
 
             # 通过端口探测确认启动完成
-            if not _wait_for_port(self.config.proxy_port, timeout=10):
+            if not _wait_for_port(self.config.proxy_port, timeout=15):
                 if process.poll() is not None:
+                    # 进程已退出，输出日志帮助排障
+                    log_tail = ""
+                    try:
+                        log_f.flush()
+                        lines = self._log_file.read_text(encoding="utf-8").strip().splitlines()
+                        log_tail = "\n".join(lines[-10:])  # 最后 10 行
+                    except Exception:
+                        pass
                     logger.error(
                         f"  -> ✗ mihomo 启动后退出 (code={process.returncode}), "
                         f"请查看日志: {self._log_file}"
                     )
+                    if log_tail:
+                        logger.error(f"  -> 日志尾部:\n{log_tail}")
                     return False
                 logger.warning("  -> [WARN] mihomo 进程已启动但代理端口尚未就绪")
 

@@ -4,6 +4,7 @@ mihomo 订阅配置管理
 职责:
 - 下载 Clash 订阅配置
 - 修补配置 (覆盖端口、清理冲突项、安全加固)
+- 预下载 GeoIP/GeoSite 数据库 (避免 mihomo 启动时因网络问题下载失败)
 """
 import logging
 import urllib.request
@@ -72,6 +73,7 @@ def patch_config(config: ProxyConfig, config_file: Path) -> None:
     5. 确保 TUN 模式关闭 (需要特殊权限)
     6. DNS 安全配置 (避免绑定 0.0.0.0:53)
     7. API 认证设置
+    8. GeoIP/GeoSite 数据库配置 (使用国内镜像 + 预下载)
 
     Args:
         config: 代理配置
@@ -119,8 +121,91 @@ def patch_config(config: ProxyConfig, config_file: Path) -> None:
         if config.api_secret:
             data["secret"] = config.api_secret
 
+        # ── 8. GeoIP/GeoSite 数据库配置 ──
+        # 使用国内可达的 CDN 镜像，避免 mihomo 从 GitHub 下载超时
+        # 同时关闭自动更新（由我们预下载管理）
+        data["geodata-mode"] = True
+        data["geo-auto-update"] = False
+        data["geo-update-interval"] = 168  # 7 天
+        data["geox-url"] = {
+            "geoip": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat",
+            "geosite": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
+            "mmdb": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb",
+            "asn": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb",
+        }
+
         with open(config_file, "w", encoding="utf-8") as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
 
+        # 预下载 GeoIP 数据库，避免 mihomo 启动时下载失败
+        _ensure_geodata(config.config_dir)
+
     except Exception as e:
         logger.warning(f"  -> [WARN] 配置修补失败 (仍可使用原始配置): {e}")
+
+
+# ── GeoIP / GeoSite 数据库预下载 ───────────────────────────
+
+# 国内 CDN 镜像，按优先级排列
+_GEO_MIRRORS = [
+    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release",
+    "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release",
+    "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release",
+]
+
+# 需要预下载的文件列表
+_GEO_FILES = [
+    ("country.mmdb", "country.mmdb"),      # GeoIP MMDB (GEOIP 规则必需)
+    ("geoip.dat", "geoip.dat"),            # GeoIP DAT (geodata-mode 使用)
+    ("geosite.dat", "geosite.dat"),        # GeoSite DAT (GEOSITE 规则使用)
+]
+
+
+def _ensure_geodata(config_dir: Path) -> None:
+    """预下载 GeoIP/GeoSite 数据库到 config_dir
+
+    mihomo 启动时如果找不到这些文件会尝试从 GitHub 下载，
+    在 AutoDL 等受限网络环境中几乎一定会超时。
+    预先下载可以避免这个问题。
+
+    Args:
+        config_dir: mihomo 配置目录 (如 /etc/mihomo)
+    """
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    for filename, _ in _GEO_FILES:
+        target = config_dir / filename
+        if target.exists() and target.stat().st_size > 0:
+            continue  # 已存在且非空，跳过
+
+        logger.info(f"  -> 正在下载 {filename}...")
+
+        downloaded = False
+        for mirror in _GEO_MIRRORS:
+            url = f"{mirror}/{filename}"
+            try:
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "mihomo/geodata-downloader",
+                })
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    data = resp.read()
+
+                if len(data) < 1024:
+                    # 文件太小，可能是错误页面
+                    logger.warning(f"     {filename} 从 {mirror} 下载的文件过小，尝试下一个镜像")
+                    continue
+
+                target.write_bytes(data)
+                logger.info(f"     ✓ {filename} ({len(data) // 1024} KB)")
+                downloaded = True
+                break
+
+            except Exception as e:
+                logger.warning(f"     {filename} 从 {mirror} 下载失败: {e}")
+                continue
+
+        if not downloaded:
+            logger.warning(
+                f"  -> [WARN] {filename} 所有镜像均下载失败，"
+                f"mihomo 启动时可能会报错"
+            )
