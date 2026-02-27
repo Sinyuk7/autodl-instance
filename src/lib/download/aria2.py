@@ -274,72 +274,16 @@ class Aria2Strategy(DownloadStrategy):
     #
     # aria2 不产生持久化缓存目录:
     # - --disk-cache 是内存缓存，进程结束即释放
-    # - .aria2 控制文件与下载文件同目录，用于断点续传
+    # - .aria2 控制文件与下载文件同目录，用于断点续传，下载完成后自动删除
     #
-    # purge_cache() 提供搜索并清理残留 .aria2 控制文件的能力
+    # 因此 cache_info() 和 purge_cache() 均返回空，
+    # 保留接口以便未来添加其他有缓存的策略（如 HuggingFace Hub）
 
     def cache_info(self) -> List[CacheEntry]:
-        """aria2 无持久化缓存目录，返回空列表
-        
-        说明:
-        - --disk-cache 是内存缓存，不产生磁盘文件
-        - .aria2 控制文件位置不固定（与下载文件同目录），不适合在此报告
-        """
+        """aria2 无持久化缓存目录，返回空列表"""
         return []
 
-    def purge_cache(self, pattern: Optional[str] = None) -> List[PurgeResult]:
-        """搜索并清理残留的 .aria2 控制文件
-        
-        Args:
-            pattern: 搜索目录路径（glob 模式），如 "/root/autodl-tmp/*"
-                     默认搜索常见下载目录
-        
-        Returns:
-            清理结果列表
-            
-        说明:
-            .aria2 控制文件是断点续传的依据，正常情况下载完成后会自动删除。
-            此方法用于清理异常中断后残留的控制文件。
-        """
-        # 默认搜索目录
-        default_dirs = [
-            Path("/root/autodl-tmp"),
-            Path("/root/autodl-fs"),
-            Path.home() / "Downloads",
-        ]
-        
-        search_dirs: List[Path] = []
-        if pattern:
-            # 支持 glob 模式，如 "/data/*" 展开为实际目录
-            for p in Path("/").glob(pattern.lstrip("/")):
-                if p.is_dir():
-                    search_dirs.append(p)
-            # 如果 pattern 本身是目录
-            pattern_path = Path(pattern)
-            if pattern_path.is_dir() and pattern_path not in search_dirs:
-                search_dirs.append(pattern_path)
-        else:
-            search_dirs = [d for d in default_dirs if d.exists()]
-        
-        if not search_dirs:
-            return []
-        
-        results: List[PurgeResult] = []
-        for search_dir in search_dirs:
-            try:
-                # 搜索 .aria2 控制文件
-                for ctrl_file in search_dir.rglob("*.aria2"):
-                    if not ctrl_file.is_file():
-                        continue
-                    try:
-                        size = ctrl_file.stat().st_size
-                        ctrl_file.unlink()
-                        results.append(PurgeResult(str(ctrl_file), size, True))
-                        logger.debug(f"  -> [aria2] 已清理控制文件: {ctrl_file}")
-                    except OSError as e:
-                        results.append(PurgeResult(str(ctrl_file), 0, False, str(e)))
-            except OSError as e:
-                logger.debug(f"  -> [aria2] 搜索目录失败 {search_dir}: {e}")
-        
-        return results
+    def purge_cache(self) -> List[PurgeResult]:
+        """aria2 无持久化缓存，返回空列表"""
+        return []
 

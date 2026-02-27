@@ -154,25 +154,15 @@ class DownloadManager:
             entries.extend(strategy.cache_info())
         return entries
 
-    def purge_cache(
-        self,
-        cache_type: Optional[str] = None,
-        pattern: Optional[str] = None,
-    ) -> List[PurgeResult]:
-        """聚合清理所有（或指定类型）策略的缓存
-
-        Args:
-            cache_type: 策略名称过滤（如 "aria2"），None 表示全部
-            pattern:    传递给各策略的匹配模式
+    def purge_cache(self) -> List[PurgeResult]:
+        """聚合清理所有策略的缓存
 
         Returns:
             所有策略的清理结果合并列表
         """
         results: List[PurgeResult] = []
         for strategy in self._all_strategies:
-            if cache_type and strategy.name != cache_type:
-                continue
-            results.extend(strategy.purge_cache(pattern=pattern))
+            results.extend(strategy.purge_cache())
         return results
 
 
@@ -200,9 +190,6 @@ def cache_info() -> List[CacheEntry]:
     return _get_manager().cache_info()
 
 
-def purge_cache(
-    cache_type: Optional[str] = None,
-    pattern: Optional[str] = None,
-) -> List[PurgeResult]:
+def purge_cache() -> List[PurgeResult]:
     """清理下载缓存"""
-    return _get_manager().purge_cache(cache_type=cache_type, pattern=pattern)
+    return _get_manager().purge_cache()

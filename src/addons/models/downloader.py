@@ -12,7 +12,6 @@ Model Manager - ComfyUI 模型管理 CLI (交互式)
 缓存管理:
     model cache                             # 查看下载缓存
     model cache clear                       # 清理所有缓存
-    model cache clear --pattern FLUX        # 只清理包含 FLUX 的缓存
 """
 import argparse
 import logging
@@ -424,15 +423,9 @@ def cmd_cache_list() -> None:
         ui.print_info(f"缓存总大小: {format_size(total_size // 1024)}")
 
 
-def cmd_cache_clear(
-    pattern: Optional[str] = None,
-    force: bool = False,
-) -> None:
+def cmd_cache_clear(force: bool = False) -> None:
     """清理下载缓存"""
-    if pattern:
-        ui.print_panel("清理缓存", f"匹配: *{pattern}*")
-    else:
-        ui.print_panel("清理缓存", "范围: 全部")
+    ui.print_panel("清理缓存", "范围: 全部")
 
     if not force:
         ui.print_warning("此操作将删除下载缓存，已下载完成的模型不受影响。")
@@ -440,7 +433,7 @@ def cmd_cache_clear(
             ui.print_info("已取消")
             return
 
-    results = purge_cache(pattern=pattern)
+    results = purge_cache()
 
     if not results:
         ui.print_info("没有需要清理的缓存")
@@ -487,7 +480,6 @@ def main() -> None:
 缓存管理:
   model cache                      # 查看下载缓存
   model cache clear                # 清理所有缓存
-  model cache clear --pattern FLUX # 只清理包含 FLUX 的缓存
         """
     )
     sub = parser.add_subparsers(dest="cmd")
@@ -507,10 +499,6 @@ def main() -> None:
     cache_sub.add_parser("list", help="列出下载缓存")
     
     cache_clear = cache_sub.add_parser("clear", help="清理下载缓存")
-    cache_clear.add_argument(
-        "-p", "--pattern",
-        help="匹配模式 (如 FLUX 只清理包含 FLUX 的缓存)"
-    )
     cache_clear.add_argument("-f", "--force", action="store_true", help="跳过确认")
     
     args = parser.parse_args()
@@ -534,10 +522,7 @@ def main() -> None:
         if args.cache_cmd == "list" or args.cache_cmd is None:
             cmd_cache_list()
         elif args.cache_cmd == "clear":
-            cmd_cache_clear(
-                pattern=args.pattern,
-                force=args.force
-            )
+            cmd_cache_clear(force=args.force)
         else:
             cache_parser.print_help()
     else:

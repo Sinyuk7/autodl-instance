@@ -120,13 +120,9 @@ class DownloadStrategy(ABC):
         """
         return []
 
-    def purge_cache(self, pattern: Optional[str] = None) -> List[PurgeResult]:
+    def purge_cache(self) -> List[PurgeResult]:
         """清理本策略管理的缓存
         
-        Args:
-            pattern: 匹配模式（如 "FLUX" 只清理包含 FLUX 的条目），
-                     None 表示清理全部
-                     
         Returns:
             每次删除操作的结果列表
         """

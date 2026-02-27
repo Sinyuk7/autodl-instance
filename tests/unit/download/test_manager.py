@@ -111,12 +111,15 @@ class TestCacheAggregation:
     """缓存聚合测试"""
     
     def test_cache_info_returns_aria2_entries(self):
-        """cache_info 返回 Aria2 缓存条目"""
+        """cache_info 返回 Aria2 缓存条目
+        
+        aria2 不产生持久化缓存目录，返回空列表
+        """
         manager = DownloadManager()
         
         # 调用实际的 cache_info
         entries = manager.cache_info()
         
-        # 应该包含 Aria2 的缓存条目
-        names = [e.name for e in entries]
-        assert any("Aria2" in name for name in names)
+        # aria2 无持久化缓存，返回空列表
+        assert isinstance(entries, list)
+        assert len(entries) == 0

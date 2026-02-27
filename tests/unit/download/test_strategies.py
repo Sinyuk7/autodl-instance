@@ -35,13 +35,15 @@ class TestAria2Strategy:
             assert strategy.is_available() is False
     
     def test_cache_info_returns_correct_structure(self):
-        """cache_info 返回正确结构"""
+        """cache_info 返回正确结构
+        
+        aria2 不产生持久化缓存目录，cache_info 返回空列表
+        """
         strategy = Aria2Strategy()
         entries = strategy.cache_info()
         
         assert isinstance(entries, list)
-        assert len(entries) == 1  # 只有 Aria2 临时目录
-        assert entries[0].name == "Aria2 临时文件"
+        assert len(entries) == 0  # aria2 无持久化缓存
     
     def test_pre_download_creates_parent_dir(self, tmp_path: Path):
         """pre_download 创建父目录"""
