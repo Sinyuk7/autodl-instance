@@ -250,6 +250,12 @@ class HuggingFaceHubStrategy(DownloadStrategy):
                     shutil.rmtree(staging_dir, ignore_errors=True)
 
         # ── 正式下载（生命周期由 Manager 统一编排）─────────
+        hf_endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
+        is_mirror = "huggingface.co" not in hf_endpoint
+        if is_mirror:
+            logger.info(f"  -> [hf_hub] 镜像站: {hf_endpoint}")
+        else:
+            logger.info(f"  -> [hf_hub] 端点: {hf_endpoint} (官方)")
         logger.info(f"  -> [hf_hub] 下载: {repo_id} / {filename}")
 
         try:

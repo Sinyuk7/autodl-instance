@@ -1,6 +1,10 @@
 # 模型预设配置
 # 每个预设代表一个完整工作流所需的模型组合
 # 格式兼容 comfy-lock.yaml 的 models 部分
+#
+# ⚠️ 注意: HuggingFace URL 必须使用 /resolve/main/ 而非 /blob/main/
+#    - /resolve/main/ → 直接文件下载，走 CDN 高速通道
+#    - /blob/main/   → 网页浏览地址，会导致下载极慢 (如 400kB/s)
 
 presets:
   # ============================================================
@@ -34,19 +38,19 @@ presets:
     description: "Z-Image Base 6B (Tongyi-MAI)"
     models:
       - model: "z-image-base-bf16"
-        url: "https://huggingface.co/Comfy-Org/z_image/blob/main/split_files/diffusion_models/z_image_bf16.safetensors"
+        url: "https://huggingface.co/Comfy-Org/z_image/resolve/main/split_files/diffusion_models/z_image_bf16.safetensors"
         paths:
           - path: "unet/z_image_base_bf16.safetensors"
         type: "unet"
 
       - model: "z-image-vae"
-        url: "https://huggingface.co/Comfy-Org/z_image/blob/main/split_files/vae/ae.safetensors"
+        url: "https://huggingface.co/Comfy-Org/z_image/resolve/main/split_files/vae/ae.safetensors"
         paths:
           - path: "vae/z_image_ae.safetensors" # 已在此处重命名以防止冲突
         type: "vae"
 
       - model: "qwen-3-4b-clip"
-        url: "https://huggingface.co/Comfy-Org/z_image/blob/main/split_files/text_encoders/qwen_3_4b.safetensors"
+        url: "https://huggingface.co/Comfy-Org/z_image/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors"
         paths:
           - path: "clip/qwen_3_4b.safetensors"
         type: "clip"
