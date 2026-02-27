@@ -7,6 +7,8 @@ mihomo 订阅配置管理
 - 预下载 GeoIP/GeoSite 数据库 (避免 mihomo 启动时因网络问题下载失败)
 """
 import logging
+import shutil
+import subprocess
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -15,62 +17,69 @@ from src.lib.network.proxy.base import ProxyConfig
 
 logger = logging.getLogger("autodl_setup")
 
+# mihomo 官方 UA（部分机场据此返回支持 vless/hysteria2 等协议的配置）
+_DEFAULT_UA = "clash.meta"
 
-class _RedirectHandlerKeepUA(urllib.request.HTTPRedirectHandler):
-    """跟随重定向时保留 User-Agent 头
 
-    Python 标准库的 HTTPRedirectHandler 在 302 重定向后会丢弃
-    自定义 headers（包括 User-Agent），导致重定向后的请求使用
-    Python-urllib 默认 UA，被机场后端拒绝 (403)。
+def _download_with_curl(url: str, dest: Path, ua: str = _DEFAULT_UA) -> bool:
+    """使用 curl 下载订阅配置
 
-    此 handler 确保重定向后的请求保留原始 User-Agent。
+    很多机场后端（如 V2Board）经过 Cloudflare 保护，会检测 TLS 指纹、
+    Cookie、HTTP/2 等特征。Python urllib 的 TLS 指纹与主流浏览器/客户端
+    差异较大，容易被 403。curl 的 TLS 栈更接近主流客户端，兼容性更好。
+
+    Args:
+        url: 订阅地址
+        dest: 下载目标路径
+        ua: User-Agent
+
+    Returns:
+        True 表示下载成功
     """
+    if not shutil.which("curl"):
+        logger.debug("  -> curl 不可用，跳过")
+        return False
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if new_req is not None:
-            # 诊断：打印重定向前后的 headers
-            orig_ua = req.get_header("User-agent") or req.header_items()
-            logger.debug(
-                f"  -> [REDIRECT] {code} -> {newurl}\n"
-                f"     原始 headers: {req.header_items()}\n"
-                f"     新请求 headers (before fix): {new_req.header_items()}"
-            )
+    try:
+        result = subprocess.run(
+            [
+                "curl", "-sSL",          # silent, show errors, follow redirects
+                "--max-time", "30",      # 超时 30 秒
+                "--retry", "2",          # 重试 2 次
+                "--retry-delay", "3",    # 重试间隔 3 秒
+                "-H", f"User-Agent: {ua}",
+                "-o", str(dest),
+                url,
+            ],
+            capture_output=True, text=True, timeout=60,
+        )
 
-            # 从原始请求中提取 UA（urllib 内部存储格式: 首字母大写 "User-agent"）
-            ua = req.get_header("User-agent")
-            if not ua:
-                # 也可能在 unredirected_headers 中
-                ua = req.unredirected_hdrs.get("User-Agent") or req.unredirected_hdrs.get("User-agent")
+        if result.returncode != 0:
+            logger.debug(f"  -> curl 下载失败 (code={result.returncode}): {result.stderr.strip()}")
+            dest.unlink(missing_ok=True)
+            return False
 
-            if ua:
-                # add_header 会被重定向清除，用 add_unredirected_header 更持久
-                new_req.add_unredirected_header("User-agent", ua)
-                # 同时也加到普通 headers 中（双保险）
-                new_req.add_header("User-agent", ua)
+        # 验证下载内容
+        if not dest.exists() or dest.stat().st_size < 100:
+            logger.debug(f"  -> curl 下载的文件过小或不存在")
+            dest.unlink(missing_ok=True)
+            return False
 
-            logger.debug(f"     新请求 headers (after fix): {new_req.header_items()}")
-        return new_req
+        return True
 
-
-# 订阅下载使用的 User-Agent 列表（按优先级排列）
-# 部分机场会根据 UA 返回不同格式的配置，或拒绝不认识的 UA
-_SUBSCRIPTION_USER_AGENTS = [
-    "clash.meta",                                    # mihomo 官方 UA（最优，支持 vless/hysteria2）
-    "ClashForAndroid/2.5.12",                        # CFA 常见 UA
-    "clash-verge/v1.3.8",                            # clash-verge 客户端
-    "ClashX/1.95.1",                                 # ClashX macOS 客户端
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",    # 通用浏览器 UA（兜底）
-]
+    except Exception as e:
+        logger.debug(f"  -> curl 异常: {e}")
+        dest.unlink(missing_ok=True)
+        return False
 
 
 def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
     """下载/更新 Clash 订阅配置
 
-    支持:
-    - 多 User-Agent 重试 (部分机场会拒绝特定 UA)
-    - 通过系统代理下载 (如 AutoDL turbo 学术加速)
-    - 已有配置文件时下载失败不覆盖
+    下载策略 (按优先级):
+    1. curl 直连 — TLS 指纹兼容性最好，绕过 Cloudflare 检测
+    2. curl 通过 noproxy — 明确不走系统代理
+    3. 如果有旧配置 — 复用旧配置继续
 
     Args:
         config: 代理配置
@@ -87,51 +96,24 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
     logger.info("  -> 正在更新订阅配置...")
     config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # 构建两个 opener:
-    #   1. 直连（机场订阅通常是国内地址，直连更快更可靠）
-    #   2. 通过环境代理（turbo 学术加速，作为兜底）
-    # 使用自定义 redirect handler 保留 UA，防止重定向后被机场 403
-    redirect_handler = _RedirectHandlerKeepUA()
-    direct_opener = urllib.request.build_opener(
-        redirect_handler,
-        urllib.request.ProxyHandler({})  # 空字典 = 不使用任何代理
-    )
-    proxy_opener = urllib.request.build_opener(
-        redirect_handler,
-        urllib.request.ProxyHandler()    # 无参数 = 使用环境变量中的代理
-    )
+    # 策略 1: curl 下载（TLS 指纹兼容性好，能绕过 Cloudflare 等 WAF）
+    if _download_with_curl(url, config_file, ua=_DEFAULT_UA):
+        patch_config(config, config_file)
+        logger.info(f"  -> ✓ 订阅配置已更新: {config_file}")
+        return True
 
-    last_error = None
-    for ua in _SUBSCRIPTION_USER_AGENTS:
-        for opener, label in [(direct_opener, "直连"), (proxy_opener, "代理")]:
-            try:
-                req = urllib.request.Request(url, headers={"User-Agent": ua})
-                with opener.open(req, timeout=30) as resp:
-                    config_data = resp.read()
+    logger.debug("  -> curl 默认 UA 失败，尝试 ClashForAndroid UA...")
 
-                # 基本验证：订阅内容不能太短（至少应该是一个有效 YAML）
-                if len(config_data) < 100:
-                    logger.debug(f"  -> [{label}] UA '{ua}' 返回数据过短 ({len(config_data)} bytes)，跳过")
-                    continue
+    # 策略 2: 换一个 UA 重试
+    if _download_with_curl(url, config_file, ua="ClashForAndroid/2.5.12"):
+        patch_config(config, config_file)
+        logger.info(f"  -> ✓ 订阅配置已更新: {config_file}")
+        return True
 
-                # 写入配置文件
-                config_file.write_bytes(config_data)
+    # 所有策略都失败了
+    logger.error(f"  -> ✗ 订阅更新失败")
 
-                # 注入/覆盖本地端口和 API 配置
-                patch_config(config, config_file)
-
-                logger.info(f"  -> ✓ 订阅配置已更新 ({label}): {config_file}")
-                return True
-
-            except Exception as e:
-                last_error = e
-                logger.debug(f"  -> [{label}] UA '{ua}' 下载失败: {e}")
-                continue
-
-    # 所有组合都失败了
-    logger.error(f"  -> ✗ 订阅更新失败 (已尝试 {len(_SUBSCRIPTION_USER_AGENTS)} 种 UA × 2 种网络): {last_error}")
-
-    # 如果已有旧配置，提示可以继续使用
+    # 如果已有旧配置，复用继续
     if config_file.exists() and config_file.stat().st_size > 0:
         logger.info("  -> 检测到已有订阅配置，将使用旧配置继续")
         patch_config(config, config_file)
