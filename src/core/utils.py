@@ -49,11 +49,17 @@ logger = logging.getLogger("autodl_setup")
 
 
 def kill_process_by_name(pattern: str, exclude_pid: Optional[int] = None) -> None:
-    """根据进程名模式清理进程，用于处理 Ctrl+Z 或异常退出残留的进程"""
+    """
+    根据进程名模式清理进程，用于处理 Ctrl+Z 或异常退出残留的进程
+    
+    注意: 使用 grep -v grep 的技巧来排除 pgrep 自身被匹配的问题
+    """
     try:
+        # 使用 ps + grep 替代 pgrep，避免 pgrep -f 匹配自身命令行的问题
+        # grep -v grep 排除 grep 进程本身
         result = subprocess.run(
-            ["pgrep", "-f", pattern],
-            capture_output=True, text=True, check=False
+            f"ps aux | grep -E '{pattern}' | grep -v grep | awk '{{print $2}}'",
+            shell=True, capture_output=True, text=True, check=False
         )
         if result.returncode == 0 and result.stdout.strip():
             pids = [int(p) for p in result.stdout.strip().split('\n') if p]
