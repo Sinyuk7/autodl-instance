@@ -232,19 +232,9 @@ class Aria2Strategy(DownloadStrategy):
         # 记录代理设置
         self._log_proxy_settings()
 
-        # CivitAI Token (仅使用 URL 参数方式)
-        # 注意: 不能使用 Authorization Header，因为 CivitAI 会重定向到预签名的 R2 CDN URL，
-        # aria2 会将 Header 带到 R2，导致 R2 返回 400 Bad Request
-        if "civitai.com" in url:
-            token = os.environ.get(ENV_CIVITAI_TOKEN)
-            if token:
-                # 仅使用 URL 参数方式 (CivitAI API 支持)
-                separator = "&" if "?" in url else "?"
-                url = f"{url}{separator}token={token}"
-                logger.debug("  -> [aria2] CivitAI Token 已注入 (URL 参数)")
-            else:
-                logger.warning("  -> [aria2] CivitAI Token 未配置，部分模型可能无法下载")
-                logger.warning("  -> 请设置环境变量: export CIVITAI_API_TOKEN='your_token'")
+        # CivitAI: 不在 aria2 层面处理 token
+        # Token 认证已在 civitai.py 的 API 调用中完成，aria2 直接使用返回的下载 URL
+        # 注意: 某些需要登录的模型可能需要额外处理，但大部分公开模型无需 token
 
         # HuggingFace: 替换为镜像站 + 注入 Token
         hf_endpoint = os.environ.get("HF_ENDPOINT", "")
