@@ -25,7 +25,8 @@ class AppContext:
     
     # === 基础路径（main.py 注入，不可变）===
     project_root: Path
-    base_dir: Path  # /root/autodl-tmp
+    base_dir: Path      # /root/autodl-tmp (数据盘)
+    comfy_dir: Path     # /root/ComfyUI (系统盘)
     
     # === 注入的服务 ===
     cmd: ICommandRunner

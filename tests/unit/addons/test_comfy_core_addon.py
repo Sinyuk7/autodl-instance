@@ -24,10 +24,12 @@ class TestSetup:
 
         # 验证状态
         assert app_context.state.is_completed(StateKey.COMFY_INSTALLED)
-        # 验证 artifacts
-        comfy_dir = app_context.base_dir / "ComfyUI"
+        # 验证 artifacts - comfy_dir 现在来自 context.comfy_dir（系统盘）
+        comfy_dir = app_context.comfy_dir
         assert app_context.artifacts.comfy_dir == comfy_dir
         assert app_context.artifacts.custom_nodes_dir == comfy_dir / "custom_nodes"
+        # 验证 output_dir 在 base_dir（tmp 盘）
+        assert app_context.artifacts.output_dir == app_context.base_dir / "ComfyUI_output"
 
     def test_skip_when_already_installed(self, app_context: AppContext, mock_runner):
         """已安装时跳过：状态已标记时不重复安装"""
@@ -37,8 +39,8 @@ class TestSetup:
             addon = ComfyAddon()
             addon.setup(app_context)
 
-        # artifacts 仍应设置
-        assert app_context.artifacts.comfy_dir == app_context.base_dir / "ComfyUI"
+        # artifacts 仍应设置 - comfy_dir 来自 context.comfy_dir
+        assert app_context.artifacts.comfy_dir == app_context.comfy_dir
         # 不应调用安装命令
         mock_runner.assert_not_called_with("comfy --workspace")
 

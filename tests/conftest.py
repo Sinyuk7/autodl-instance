@@ -39,11 +39,20 @@ def tmp_base_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def tmp_comfy_dir(tmp_path: Path) -> Path:
+    """使用 pytest tmp_path 作为 comfy_dir"""
+    comfy = tmp_path / "ComfyUI"
+    comfy.mkdir(parents=True, exist_ok=True)
+    return comfy
+
+
+@pytest.fixture
 def app_context(
     mock_runner: MockRunner,
     mock_state: MockStateManager,
     project_root: Path,
     tmp_base_dir: Path,
+    tmp_comfy_dir: Path,
 ) -> AppContext:
     """
     构建一个完整的测试用 AppContext
@@ -55,6 +64,7 @@ def app_context(
     return AppContext(
         project_root=project_root,
         base_dir=tmp_base_dir,
+        comfy_dir=tmp_comfy_dir,
         cmd=mock_runner,
         state=mock_state,
         artifacts=Artifacts(),

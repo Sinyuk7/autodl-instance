@@ -30,6 +30,7 @@ from src.addons.models.plugin import ModelAddon
 # 全局常量
 # ============================================================
 BASE_DIR = Path("/root/autodl-tmp")
+COMFY_DIR = Path("/root/ComfyUI")  # ComfyUI 安装目录（系统盘）
 DEFAULT_PORT = 6006
 
 
@@ -112,6 +113,7 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
     return AppContext(
         project_root=project_root,
         base_dir=BASE_DIR,
+        comfy_dir=COMFY_DIR,
         cmd=SubprocessRunner(),
         state=FileStateManager(BASE_DIR),
         artifacts=artifacts,

@@ -99,15 +99,22 @@ class TestSetupUntilComfyCore:
         
         assert context_with_home.artifacts.custom_nodes_dir is not None
 
-    def test_comfy_dir_is_under_base_dir(self, context_with_home: AppContext):
-        """comfy_dir 应在 base_dir 下"""
+    def test_comfy_dir_matches_context(self, context_with_home: AppContext):
+        """comfy_dir 应来自 context.comfy_dir（系统盘）"""
         execute("setup", context_with_home, until="comfy_core")
         
-        comfy_dir = context_with_home.artifacts.comfy_dir
+        # comfy_dir 应该等于 context 中定义的路径
+        assert context_with_home.artifacts.comfy_dir == context_with_home.comfy_dir
+    
+    def test_output_dir_is_under_base_dir(self, context_with_home: AppContext):
+        """output_dir 应在 base_dir 下（tmp 盘）"""
+        execute("setup", context_with_home, until="comfy_core")
+        
+        output_dir = context_with_home.artifacts.output_dir
         base_dir = context_with_home.base_dir
         
-        # comfy_dir 应该是 base_dir 的子路径
-        assert str(comfy_dir).startswith(str(base_dir))
+        # output_dir 应该是 base_dir 的子路径
+        assert str(output_dir).startswith(str(base_dir))
 
 
 class TestSetupOnlyMode:
@@ -132,8 +139,12 @@ class TestSetupOnlyMode:
         这证明了 --only 模式的危险性：它跳过依赖检查，
         如果插件依赖前序插件的产出，会导致运行时错误。
         """
-        with pytest.raises(RuntimeError) as exc_info:
-            execute("setup", context_with_home, only="comfy_core")
+        from unittest.mock import patch
+        
+        # 确保 comfy-cli 不存在，强制进入 uv 安装流程
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(RuntimeError) as exc_info:
+                execute("setup", context_with_home, only="comfy_core")
         
         # 验证错误信息包含依赖提示
         assert "uv" in str(exc_info.value).lower() or "SystemAddon" in str(exc_info.value)

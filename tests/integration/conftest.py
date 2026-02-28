@@ -37,6 +37,16 @@ def integration_base_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def integration_comfy_dir(tmp_path: Path) -> Path:
+    """
+    使用 pytest tmp_path 作为 comfy_dir（系统盘模拟）
+    """
+    comfy = tmp_path / "ComfyUI"
+    comfy.mkdir(parents=True, exist_ok=True)
+    return comfy
+
+
+@pytest.fixture
 def integration_runner() -> MockRunner:
     """
     集成测试用的 MockRunner
@@ -78,6 +88,7 @@ def integration_context(
     integration_state: MockStateManager,
     integration_project_root: Path,
     integration_base_dir: Path,
+    integration_comfy_dir: Path,
 ) -> AppContext:
     """
     集成测试用的完整 AppContext
@@ -90,6 +101,7 @@ def integration_context(
     return AppContext(
         project_root=integration_project_root,
         base_dir=integration_base_dir,
+        comfy_dir=integration_comfy_dir,
         cmd=integration_runner,
         state=integration_state,
         artifacts=Artifacts(),
