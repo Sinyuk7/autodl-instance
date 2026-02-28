@@ -145,6 +145,13 @@ def fetch_model_info_by_version(version_id: int) -> Optional[Dict[str, Any]]:
             "comfy_type": str,      # ComfyUI 目录 (如 "loras")
             "base_model": str,      # 如 "SD1.5", "SDXL", "Pony"
             "size_kb": int,
+            # 新增的元数据字段
+            "model_id": int,        # CivitAI 模型 ID
+            "version_id": int,      # CivitAI 版本 ID
+            "model_name": str,      # 模型名称
+            "version_name": str,    # 版本名称
+            "trigger_words": list,  # 触发词列表
+            "sha256": str,          # 文件 SHA256 哈希
         }
     """
     # 记录请求上下文
@@ -177,8 +184,16 @@ def fetch_model_info_by_version(version_id: int) -> Optional[Dict[str, Any]]:
         if not primary_file:
             return None
         
-        model_type_raw = data.get("model", {}).get("type", "other").lower()
+        model_info = data.get("model", {})
+        model_type_raw = model_info.get("type", "other").lower()
         base_model = data.get("baseModel", "unknown").replace(" ", "")
+        
+        # 提取文件哈希 (优先 SHA256)
+        hashes = primary_file.get("hashes", {})
+        sha256 = hashes.get("SHA256", "")
+        
+        # 提取触发词
+        trigger_words = data.get("trainedWords", [])
         
         return {
             "filename": primary_file.get("name", ""),
@@ -187,6 +202,13 @@ def fetch_model_info_by_version(version_id: int) -> Optional[Dict[str, Any]]:
             "comfy_type": CIVITAI_TYPE_MAP.get(model_type_raw, "other"),
             "base_model": base_model,
             "size_kb": primary_file.get("sizeKB", 0),
+            # 新增的元数据字段
+            "model_id": model_info.get("id"),
+            "version_id": data.get("id"),
+            "model_name": model_info.get("name", ""),
+            "version_name": data.get("name", ""),
+            "trigger_words": trigger_words if trigger_words else [],
+            "sha256": sha256,
         }
         
     except requests.RequestException as e:
@@ -252,6 +274,13 @@ def fetch_model_info(model_id: int, version_id: Optional[int] = None) -> Optiona
         model_type_raw = data.get("type", "other").lower()
         base_model = target_version.get("baseModel", "unknown").replace(" ", "")
         
+        # 提取文件哈希 (优先 SHA256)
+        hashes = primary_file.get("hashes", {})
+        sha256 = hashes.get("SHA256", "")
+        
+        # 提取触发词
+        trigger_words = target_version.get("trainedWords", [])
+        
         return {
             "filename": primary_file.get("name", ""),
             "download_url": primary_file.get("downloadUrl", ""),
@@ -259,6 +288,13 @@ def fetch_model_info(model_id: int, version_id: Optional[int] = None) -> Optiona
             "comfy_type": CIVITAI_TYPE_MAP.get(model_type_raw, "other"),
             "base_model": base_model,
             "size_kb": primary_file.get("sizeKB", 0),
+            # 新增的元数据字段
+            "model_id": data.get("id"),
+            "version_id": target_version.get("id"),
+            "model_name": data.get("name", ""),
+            "version_name": target_version.get("name", ""),
+            "trigger_words": trigger_words if trigger_words else [],
+            "sha256": sha256,
         }
         
     except requests.RequestException as e:

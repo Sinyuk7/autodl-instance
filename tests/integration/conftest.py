@@ -5,7 +5,6 @@
 """
 import pytest
 from pathlib import Path
-from typing import Generator
 
 from src.core.interface import AppContext
 from src.core.artifacts import Artifacts
