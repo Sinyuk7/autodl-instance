@@ -19,7 +19,7 @@ aria2:
   max_file_not_found: 2  # 文件找不到最大重试次数，避免死循环
 
   # === 速度限制 ===
-  lowest_speed_limit: "1K"  # 最低速度限制，低于此速度断开连接重试更快的源
+  lowest_speed_limit: "0"   # 最低速度限制，0 表示禁用 (CivitAI/R2 CDN 易触发误断)
 
   # === 磁盘与缓存 ===
   disk_cache: 64         # 磁盘缓存 (MB)，减少磁盘 IO
