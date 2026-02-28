@@ -1,2 +1,13 @@
 comfyui:
   base_path: __BASE_PATH__
+  checkpoints: checkpoints/
+  clip: clip/
+  clip_vision: clip_vision/
+  controlnet: controlnet/
+  diffusion_models: unet/
+  unet: unet/
+  loras: loras/
+  upscale_models: upscalers/
+  vae: vae/
+  ipadapter: ipadapter/
+  animatediff: animatediff/

@@ -4,7 +4,7 @@ Userdata Addon - ComfyUI 用户数据管理
 """
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import  List, cast
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
 from src.core.utils import logger
