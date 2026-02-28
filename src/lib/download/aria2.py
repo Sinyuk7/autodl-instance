@@ -232,14 +232,19 @@ class Aria2Strategy(DownloadStrategy):
         # 记录代理设置
         self._log_proxy_settings()
 
-        # CivitAI Token
+        # CivitAI Token (同时使用 URL 参数和 Header，确保兼容性)
         if "civitai.com" in url:
             token = os.environ.get(ENV_CIVITAI_TOKEN)
             if token:
+                # 方式1: URL 参数 (部分 API 端点需要)
                 separator = "&" if "?" in url else "?"
                 url = f"{url}{separator}token={token}"
+                # 方式2: HTTP Header (更标准的认证方式)
+                cmd += ["--header", f"Authorization: Bearer {token}"]
+                logger.debug("  -> [aria2] CivitAI Token 已注入")
             else:
-                logger.debug("  -> [aria2] CivitAI Token 未配置，部分模型可能无法下载")
+                logger.warning("  -> [aria2] CivitAI Token 未配置，部分模型可能无法下载")
+                logger.warning("  -> 请设置环境变量: export CIVITAI_API_TOKEN='your_token'")
 
         # HuggingFace: 替换为镜像站 + 注入 Token
         hf_endpoint = os.environ.get("HF_ENDPOINT", "")

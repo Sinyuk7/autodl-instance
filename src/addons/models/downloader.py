@@ -142,9 +142,22 @@ def cmd_types() -> None:
 # ============================================================
 # CLI 命令 - download (交互式)
 # ============================================================
-def _write_download_meta(target_path: Path, url: str, source: str,
-                         model_name: Optional[str] = None) -> None:
-    """下载完成后写入 .meta sidecar"""
+def _write_download_meta(
+    target_path: Path,
+    url: str,
+    source: str,
+    model_name: Optional[str] = None,
+    extra_info: Optional[dict] = None,
+) -> None:
+    """下载完成后写入 .meta sidecar
+    
+    Args:
+        target_path: 模型文件路径
+        url: 原始下载 URL
+        source: 来源类型 (civitai, huggingface, preset, direct)
+        model_name: 模型名称 (可选)
+        extra_info: 额外信息字典 (如 CivitAI API 返回的信息)
+    """
     from datetime import datetime, timezone
     meta = {
         "url": url,
@@ -152,6 +165,14 @@ def _write_download_meta(target_path: Path, url: str, source: str,
         "model": model_name or target_path.stem,
         "downloaded_at": datetime.now(timezone.utc).isoformat(),
     }
+    
+    # 合并额外信息 (如 CivitAI 的 model_type, base_model, size_kb 等)
+    if extra_info:
+        # 避免覆盖核心字段
+        for key, value in extra_info.items():
+            if key not in meta and value is not None:
+                meta[key] = value
+    
     write_meta(target_path, meta)
 
 
@@ -166,6 +187,7 @@ def cmd_download_interactive(url: str) -> None:
     suggested_subdir: Optional[str] = None
     download_url: str = url
     size_info: str = ""
+    civitai_info: Optional[dict] = None  # 保存 CivitAI API 返回的完整信息
     
     ui.print_panel("下载模型", f"URL: {url}\n来源: {url_type.upper()}")
     
@@ -175,6 +197,7 @@ def cmd_download_interactive(url: str) -> None:
         resolved_url, info = resolve_civitai_url(url)
         
         if info:
+            civitai_info = info  # 保存完整信息用于写入 .meta
             filename = info.get("filename", "")
             suggested_type = info.get("comfy_type", "")
             suggested_subdir = info.get("base_model", "")
@@ -300,7 +323,7 @@ def cmd_download_interactive(url: str) -> None:
         sys.exit(1)
     
     # ========== Step 8: 写入 .meta sidecar ==========
-    _write_download_meta(target_path, url=url, source=url_type)
+    _write_download_meta(target_path, url=url, source=url_type, extra_info=civitai_info)
     
     ui.print_success(f"下载完成: {rel_path}")
 
