@@ -52,8 +52,12 @@ class UserdataAddon(BaseAddon):
         
         # 确保目标存在
         data_path.mkdir(parents=True, exist_ok=True)
-        comfy_path.symlink_to(data_path)
-        logger.debug(f"  -> 链接 {name}")
+        try:
+            comfy_path.symlink_to(data_path)
+            logger.debug(f"  -> 链接 {name}")
+        except OSError as e:
+            # Windows 需要管理员权限创建软链接
+            logger.warning(f"  -> [SKIP] Windows 无法创建软链接（需管理员权限）: {e}")
 
     @hookimpl
     def setup(self, context: AppContext) -> None:

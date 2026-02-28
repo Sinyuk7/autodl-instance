@@ -3,7 +3,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 # 确保 autodl_setup logger 有 handler（独立 CLI 运行时未经 main.py 初始化）
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -147,7 +147,7 @@ def _write_download_meta(
     url: str,
     source: str,
     model_name: Optional[str] = None,
-    extra_info: Optional[dict] = None,
+    extra_info: Optional[Dict[str, Any]] = None,
 ) -> None:
     """下载完成后写入 .meta sidecar
     
@@ -187,7 +187,7 @@ def cmd_download_interactive(url: str) -> None:
     suggested_subdir: Optional[str] = None
     download_url: str = url
     size_info: str = ""
-    civitai_info: Optional[dict] = None  # 保存 CivitAI API 返回的完整信息
+    civitai_info: Optional[Dict[str, Any]] = None  # 保存 CivitAI API 返回的完整信息
     
     ui.print_panel("下载模型", f"URL: {url}\n来源: {url_type.upper()}")
     

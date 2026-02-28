@@ -83,7 +83,8 @@ def scan_models(models_base: Path) -> List[Dict[str, Any]]:
         if model_file.suffix.lower() in EXCLUDED_EXTENSIONS:
             continue
 
-        rel_path = str(model_file.relative_to(models_base))
+        # 使用 as_posix() 确保跨平台路径分隔符统一为 /
+        rel_path = model_file.relative_to(models_base).as_posix()
         # type = 第一层子目录名
         parts = rel_path.split("/")
         model_type = parts[0] if len(parts) > 1 else None

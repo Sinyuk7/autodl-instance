@@ -136,8 +136,12 @@ class GitAddon(BaseAddon):
             self.SSH_SYSTEM_DIR.rename(backup_dir)
             logger.info(f"  -> 已备份原有 .ssh 目录到 {backup_dir}")
 
-        self.SSH_SYSTEM_DIR.symlink_to(ssh_persistent_dir)
-        logger.info(f"  -> SSH 软链接已建立: ~/.ssh -> {ssh_persistent_dir}")
+        try:
+            self.SSH_SYSTEM_DIR.symlink_to(ssh_persistent_dir)
+            logger.info(f"  -> SSH 软链接已建立: ~/.ssh -> {ssh_persistent_dir}")
+        except OSError as e:
+            # Windows 需要管理员权限创建软链接
+            logger.warning(f"  -> [SKIP] Windows 无法创建软链接（需管理员权限）: {e}")
 
     def _test_github_connection(self, ctx: AppContext) -> None:
         """测试 GitHub SSH 连接"""
