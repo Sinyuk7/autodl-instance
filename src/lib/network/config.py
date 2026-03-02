@@ -32,7 +32,7 @@ EXPORT_KEYS: List[str] = [
     "no_proxy", "NO_PROXY",
     "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE",
     # HuggingFace
-    EnvKey.HF_ENDPOINT, EnvKey.HF_TOKEN,
+    EnvKey.HF_ENDPOINT.value, EnvKey.HF_TOKEN.value,
     # CivitAI
-    EnvKey.CIVITAI_API_TOKEN,
+    EnvKey.CIVITAI_API_TOKEN.value,
 ]

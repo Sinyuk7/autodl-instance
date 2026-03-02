@@ -16,11 +16,12 @@ def main() -> None:
         # 输出 echo 语句让用户看到（stdout 被 eval 消费）
         proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")
         if proxy:
-            print(f"echo '✓ 网络环境已就绪 (Proxy: {proxy})'")
+            # 用 stderr 输出提示信息，避免被 eval 解析
+            print(f"echo '[turbo] Proxy: {proxy}' >&2", flush=True)
         else:
-            print("echo '✓ 网络环境已就绪 (无代理)'")
+            print("echo '[turbo] No proxy' >&2", flush=True)
     else:
-        print("echo '✗ 未检测到可用的网络配置'")
+        print("echo '[turbo] No network config found' >&2", flush=True)
 
 
 if __name__ == "__main__":

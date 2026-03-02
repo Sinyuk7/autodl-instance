@@ -72,9 +72,9 @@ class SystemAddon(BaseAddon):
             "turbo": dedent(f"""\
                 #!/bin/bash
                 # AutoDL 网络环境初始化 - 自动生成，请勿手动修改
-                # 用法: eval $(turbo)
+                # 用法: source turbo
                 cd {project_dir}
-                python -m src.lib.network
+                eval $(python -m src.lib.network)
             """),
             "bye": dedent(f"""\
                 #!/bin/bash
