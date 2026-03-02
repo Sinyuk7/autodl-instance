@@ -123,8 +123,12 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
 
     logger.info("  -> 正在更新订阅配置...")
 
+    # 下载到临时文件，避免覆盖已有的有效配置
+    temp_file = config_file.parent / "config.yaml.tmp"
+
     # 策略 1: curl 下载（TLS 指纹兼容性好，能绕过 Cloudflare 等 WAF）
-    if _download_with_curl(url, config_file, ua=_DEFAULT_UA):
+    if _download_with_curl(url, temp_file, ua=_DEFAULT_UA):
+        shutil.move(str(temp_file), str(config_file))
         patch_config(config, config_file)
         logger.info(f"  -> ✓ 订阅配置已更新: {config_file}")
         return True
@@ -132,10 +136,14 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
     logger.debug("  -> curl 默认 UA 失败，尝试 ClashForAndroid UA...")
 
     # 策略 2: 换一个 UA 重试
-    if _download_with_curl(url, config_file, ua="ClashForAndroid/2.5.12"):
+    if _download_with_curl(url, temp_file, ua="ClashForAndroid/2.5.12"):
+        shutil.move(str(temp_file), str(config_file))
         patch_config(config, config_file)
         logger.info(f"  -> ✓ 订阅配置已更新: {config_file}")
         return True
+
+    # 清理临时文件
+    temp_file.unlink(missing_ok=True)
 
     # 所有在线策略都失败了
     logger.warning(f"  -> ✗ 订阅在线更新失败 (可能被机场 CDN 拦截)")
