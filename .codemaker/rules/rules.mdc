@@ -1,0 +1,420 @@
+---
+description: AI coding guidance and rules for this repository.
+alwaysApply: true
+---
+<rule>
+# AutoDL Instance - AI Coding Rules
+
+## High-Level Overview
+
+### Architecture
+This is a **plugin-based orchestration system** for automating AutoDL cloud GPU instance setup. It manages:
+- ComfyUI installation and configuration
+- Model downloading and management
+- Network proxy configuration (mihomo/turbo)
+- Git-based userdata synchronization
+
+```
+src/
+├── main.py                 # Entry point, lifecycle orchestrator
+├── core/                   # Core abstractions
+│   ├── interface.py        # AppContext, BaseAddon, hookimpl
+│   ├── artifacts.py        # Cross-plugin shared state (DTO)
+│   ├── schema.py           # StateKey, EnvKey enums
+│   ├── ports.py            # ICommandRunner, IStateManager
+│   └── adapters.py         # Concrete implementations
+├── addons/                 # Plugin modules
+│   ├── system/             # UV, SSH, cache migration
+│   ├── git_config/         # Git/SSH configuration
+│   ├── torch_engine/       # PyTorch CUDA setup
+│   ├── comfy_core/         # ComfyUI installation
+│   ├── userdata/           # Userdata symlinks & git sync
+│   ├── nodes/              # Custom nodes management
+│   └── models/             # Model directory & lock management
+└── lib/                    # Reusable libraries
+    ├── download/           # Strategy-based download manager
+    ├── network/            # Proxy & mirror management
+    └── utils.py            # YAML, SHA256, format helpers
+```
+
+### Application Entry Points
+- **Main Orchestrator**: `python -m src.main {setup|start|sync}`
+  - `setup`: Initialize environment (runs once per instance)
+  - `start`: Launch ComfyUI service
+  - `sync`: Sync state to git, generate model-lock.yaml
+
+- **Standalone CLI**: `python -m src.addons.models.downloader download <url> --type <type>`
+
+### Plugin Execution Order (Hardcoded)
+```python
+# src/main.py:create_pipeline()
+# sync 动作逆序执行
+[SystemAddon, GitAddon, TorchAddon, ComfyAddon, UserdataAddon, NodesAddon, ModelAddon]
+```
+
+---
+
+## Code Style & Consistency Enforcers
+
+### Naming Conventions
+
+| Element | Convention | Example |
+|---------|------------|---------|
+| Classes | PascalCase | `ModelAddon`, `DownloadManager`, `AppContext` |
+| Functions/Methods | snake_case | `scan_models()`, `generate_snapshot()` |
+| Private Methods | `_snake_case` (leading underscore) | `_get_comfy_dir()`, `_setup_proxy()` |
+| Constants | UPPER_SNAKE_CASE | `EXCLUDED_EXTENSIONS`, `META_SUFFIX` |
+| Module Variables | lower_snake_case | `_network_manager`, `_download_manager` |
+| Files | snake_case.py | `lock.py`, `url_utils.py` |
+| Plugin Classes | `{Name}Addon` | `ModelAddon`, `ComfyAddon` |
+| Strategy Classes | `{Name}Strategy` | `Aria2Strategy`, `DownloadStrategy` |
+
+### File Header Standard
+Every Python file MUST start with a docstring:
+```python
+"""
+模块名 - 简短描述
+
+详细说明（可选）:
+  - 要点1
+  - 要点2
+"""
+```
+
+### Type Hinting (STRICT)
+- **Required**: All function signatures MUST have type hints
+- **Style**: Use `typing` module for complex types
+- **Pattern**:
+```python
+from typing import Any, Dict, List, Optional
+from pathlib import Path
+
+def scan_models(models_base: Path) -> List[Dict[str, Any]]:
+    """扫描模型目录"""
+    ...
+
+def get_strategy(self, url: str) -> DownloadStrategy:
+    ...
+```
+
+### Import Order
+1. Standard library
+2. Third-party packages
+3. Local imports (`src.xxx`)
+
+```python
+# Standard library
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+# Third-party
+import yaml
+
+# Local
+from src.core.interface import BaseAddon, AppContext, hookimpl
+from src.core.utils import logger
+from src.lib.utils import load_yaml, save_yaml
+```
+
+### Logging Pattern
+```python
+from src.core.utils import logger
+
+# Module-level messages
+logger.info(f"\n>>> [ModuleName] 开始执行...")
+logger.info(f"  -> 子操作描述...")
+logger.warning(f"  -> [WARN] 警告信息")
+logger.info(f"  -> ✓ 成功完成")
+```
+
+---
+
+## Rapid Reference & Context Map
+
+### Core Utility Functions
+
+```python
+# src/lib/utils.py
+def load_yaml(path: Path) -> Dict[str, Any]:
+    """加载 YAML 文件，不存在返回空字典"""
+
+def save_yaml(path: Path, data: Dict[str, Any]) -> None:
+    """保存 YAML 文件 (Unicode, 不排序 keys)"""
+
+def sha256(file_path: Path) -> str:
+    """计算文件 SHA256 哈希"""
+
+def format_size(size_kb: int) -> str:
+    """格式化文件大小 (KB -> 人类可读)"""
+```
+
+```python
+# src/core/utils.py
+from src.core.utils import logger  # 全局日志器
+
+def setup_logger(log_file: Path, debug: bool = False) -> logging.Logger:
+    """配置全局日志"""
+
+def kill_process_by_name(pattern: str, exclude_pid: Optional[int] = None) -> None:
+    """根据进程名模式清理进程"""
+
+def release_port(port: int) -> None:
+    """释放指定端口"""
+```
+
+```python
+# src/lib/network/__init__.py
+from src.lib.network import setup_network, sync_proxy_config, invalidate_network_cache
+
+def setup_network(verbose: bool = True) -> None:
+    """初始化网络环境 (代理 + 镜像 + Token)"""
+```
+
+```python
+# src/lib/download/manager.py
+def download_model(url: str, target_path: Path, dry_run: bool = False) -> bool:
+    """下载模型文件（全局入口）"""
+```
+
+### Key Constants & Enums
+
+```python
+# src/core/schema.py
+class StateKey(str, Enum):
+    SYSTEM_TOOLS_INSTALLED = "system_tools_installed"
+    TORCH_INSTALLED = "torch_installed"
+    COMFY_INSTALLED = "comfy_core_installed"
+    NODES_RESTORED = "nodes_restored"
+    USERDATA_INITIALIZED = "userdata_initialized"
+    EXTRA_PATHS_CONFIGURED = "extra_paths_configured"
+
+class EnvKey(str, Enum):
+    HF_TOKEN = "HF_TOKEN"
+    HF_ENDPOINT = "HF_ENDPOINT"
+    CIVITAI_API_TOKEN = "CIVITAI_API_TOKEN"
+```
+
+```python
+# src/addons/models/lock.py
+EXCLUDED_EXTENSIONS = {
+    ".yaml", ".yml", ".json", ".txt", ".md", ".log",
+    ".py", ".sh", ".bat", ".ps1",
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp",
+    ".html", ".css", ".js",
+    ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+    ".lock", ".metadata", ".meta",
+}
+META_SUFFIX = ".meta"
+```
+
+```python
+# src/main.py
+BASE_DIR = Path("/root/autodl-tmp")     # 数据盘
+COMFY_DIR = Path("/root/ComfyUI")       # 系统盘
+DEFAULT_PORT = 6006
+```
+
+### Global Access Patterns
+
+```python
+# AppContext (注入到所有插件)
+ctx.project_root    # Path: 项目根目录
+ctx.base_dir        # Path: /root/autodl-tmp
+ctx.comfy_dir       # Path: /root/ComfyUI
+ctx.cmd             # ICommandRunner: 执行命令
+ctx.state           # IStateManager: 状态持久化
+ctx.artifacts       # Artifacts: 插件间共享数据
+ctx.debug           # bool: 调试模式
+ctx.addon_manifests # Dict: 预加载的 manifest
+
+# Artifacts (跨插件共享)
+ctx.artifacts.comfy_dir         # Path: ComfyUI 安装目录
+ctx.artifacts.custom_nodes_dir  # Path: custom_nodes 目录
+ctx.artifacts.models_dir        # Path: 模型目录
+ctx.artifacts.proxy_url         # str: 代理 URL
+ctx.artifacts.uv_bin            # Path: uv 可执行文件
+```
+
+---
+
+## Plugin Development Patterns
+
+### Plugin Skeleton (Template)
+```python
+"""
+{Name} Addon - 简短描述
+"""
+from pathlib import Path
+
+from src.core.interface import BaseAddon, AppContext, hookimpl
+from src.core.schema import StateKey
+from src.core.utils import logger
+
+
+class {Name}Addon(BaseAddon):
+    """插件描述"""
+    
+    module_dir = "{module_name}"  # MUST = 所在目录名
+    
+    # ── 私有方法 ──
+    def _some_helper(self, ctx: AppContext) -> Path:
+        ...
+    
+    # ── 生命周期钩子 ──
+    @hookimpl
+    def setup(self, context: AppContext) -> None:
+        """初始化钩子"""
+        logger.info(f"\n>>> [{self.name}] 开始初始化...")
+        ctx = context  # 命名惯例
+        
+        # 幂等检查
+        if ctx.state.is_completed(StateKey.XXX):
+            logger.info("  -> [SKIP] 已完成")
+            return
+        
+        # 执行逻辑...
+        
+        # 标记完成
+        ctx.state.mark_completed(StateKey.XXX)
+        
+        # 产出 artifacts
+        ctx.artifacts.xxx = some_value
+
+    @hookimpl
+    def start(self, context: AppContext) -> None:
+        """启动钩子"""
+        pass
+
+    @hookimpl
+    def sync(self, context: AppContext) -> None:
+        """同步钩子"""
+        pass
+```
+
+### Lifecycle Management Rules
+1. **Idempotent**: 所有 `setup()` 必须幂等，通过 `ctx.state.is_completed()` 检查
+2. **Order-dependent**: 依赖前置插件的 artifacts（如 `ctx.artifacts.comfy_dir`）
+3. **sync 逆序**: `sync()` 按插件注册的逆序执行
+
+### Error Handling Pattern
+```python
+# 检查前置依赖
+comfy_dir = ctx.artifacts.comfy_dir
+if not comfy_dir or not comfy_dir.exists():
+    logger.warning(f"  -> [WARN] ComfyUI 目录不存在，跳过")
+    return
+
+# 外部命令
+try:
+    ctx.cmd.run(["some", "command"], check=True)
+except subprocess.CalledProcessError as e:
+    logger.error(f"  -> 命令执行失败: {e}")
+    raise
+
+# 软链接创建 (Windows 兼容)
+try:
+    some_path.symlink_to(target)
+except OSError as e:
+    logger.warning(f"  -> [SKIP] 无法创建软链接: {e}")
+    return False
+```
+
+---
+
+## Strategy Pattern (Download Example)
+
+### Strategy Interface
+```python
+# src/lib/download/base.py
+class DownloadStrategy(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+    
+    @abstractmethod
+    def download(self, url: str, target: Path, dry_run: bool = False) -> bool: ...
+    
+    def pre_download(self, target: Path) -> None: ...
+    def post_download(self, target: Path) -> None: ...
+    def on_interrupt(self, target: Path) -> None: ...
+```
+
+### Adding New Strategy
+1. Create `src/lib/download/{name}.py`
+2. Implement `{Name}Strategy(DownloadStrategy)`
+3. Register in `DownloadManager._register_strategies()`
+4. Add selection logic in `DownloadManager.get_strategy()`
+
+---
+
+## Configuration Files
+
+### manifest.yaml (Plugin Config)
+```yaml
+# src/addons/{module}/manifest.yaml
+pypi_mirror: "https://pypi.tuna.tsinghua.edu.cn/simple"
+some_setting: value
+```
+
+### secrets.yaml (Credentials - NEVER COMMIT)
+```yaml
+# secrets.yaml.example 作为模板，实际 secrets.yaml 在 .gitignore
+subscription_url: "https://..."
+api_secret: "..."
+```
+
+---
+
+## Developer Workflows
+
+### Setup & Run
+```bash
+# 安装依赖
+uv pip install -r src/requirements.txt
+
+# 执行生命周期
+python -m src.main setup   # 初始化
+python -m src.main start   # 启动服务
+python -m src.main sync    # 同步状态
+
+# 单独执行某插件（调试）
+python -m src.main sync --only models
+python -m src.main setup --until comfy_core
+```
+
+### Model Download CLI
+```bash
+python -m src.addons.models.downloader download <url> --type loras
+python -m src.addons.models.downloader download <url> --type LLM/Qwen-VL
+python -m src.addons.models.downloader list
+```
+
+---
+
+## Critical Rules Summary
+
+### MUST DO
+- [ ] All functions have type hints
+- [ ] All files start with docstring
+- [ ] Plugin classes set `module_dir` = directory name
+- [ ] Use `@hookimpl` decorator for lifecycle methods
+- [ ] Check idempotency with `ctx.state.is_completed()`
+- [ ] Log with `logger.info("  -> ...")` pattern
+- [ ] Handle symlink OSError for Windows compatibility
+
+### NEVER DO
+- [ ] Hardcode paths (use `ctx.base_dir`, `ctx.comfy_dir`)
+- [ ] Commit `secrets.yaml` (only `.example`)
+- [ ] Skip type hints on public functions
+- [ ] Use magic strings for state keys (use `StateKey` enum)
+- [ ] Assume plugin order (read from `ctx.artifacts`)
+
+### Performance Notes
+- YAML loading: Use `load_yaml()` (handles missing files)
+- SHA256: Incremental hash with chunked reads (8KB)
+- Model scan: Filter 0-byte files and placeholders early
+- Network: Cached decision avoids re-initializing proxy
+
+</rule>
