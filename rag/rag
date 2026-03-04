@@ -1,0 +1,21 @@
+#!/bin/bash
+# RAG 本地检索工具启动脚本
+# 自动使用 rag-env conda 环境
+
+# 获取 rag 目录路径
+RAG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 项目根目录
+PROJECT_DIR="$(dirname "$RAG_DIR")"
+CONDA_PYTHON="/usr/local/Caskroom/miniforge/base/envs/rag-env/bin/python"
+
+if [ ! -f "$CONDA_PYTHON" ]; then
+    echo "❌ 未找到 rag-env 环境，请先创建："
+    echo "   conda create -n rag-env python=3.11"
+    echo "   conda activate rag-env"
+    echo "   pip install sentence-transformers numpy"
+    exit 1
+fi
+
+# 在项目根目录运行，这样索引会保存在项目根目录的 .rag_index/
+cd "$PROJECT_DIR"
+exec "$CONDA_PYTHON" "$RAG_DIR/rag_search.py" "$@"
