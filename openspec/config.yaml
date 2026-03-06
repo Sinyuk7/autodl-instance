@@ -1,55 +1,51 @@
-schema: spec-driven
+# openspec/config.yaml
+schema: addon-driven
 
-# Project Context
-# This is shown to AI when creating artifacts.
 context: |
   ## AutoDL Instance - 云 GPU 实例自动化配置系统
 
-  ### 技术栈
-  - **语言**: Python 3.10+
-  - **架构**: Pluggy 插件系统 + Dataclass DTOs
-  - **运行环境**: AutoDL 云 GPU 实例 (Linux, CUDA)
-  - **包管理**: uv (替代 pip)
+  ### 技术栈与环境
+  - 语言: Python 3.10+
+  - 架构: Pluggy 插件系统 + Dataclass DTOs
+  - 运行环境: AutoDL 云 GPU 实例 (Linux, CUDA)
+  - 包管理: 强制使用 uv (完全替代 pip)
 
-  ### 核心概念
-  - **Addon**: 插件单元，继承 `BaseAddon`，实现 `setup/start/sync` 生命周期
-  - **Task**: Addon 内部的可组合任务单元，继承 `BaseTask`，通过 `TaskRunner` 执行
-  - **AppContext**: 依赖注入容器，包含 `cmd`, `state`, `artifacts`
-  - **Artifacts**: 跨插件共享的 DTO (如 `comfy_dir`, `proxy_url`)
+  ### 核心架构抽象
+  - Addon: 插件单元 (继承 BaseAddon)，生命周期为 setup -> start -> sync。
+  - Task: 原子化任务单元 (继承 BaseTask)，由 TaskRunner 统一调度。
+  - AppContext: 依赖注入容器 (包含 cmd, state, artifacts)。
+  - Artifacts: 跨插件共享的 Dataclass DTO (如 comfy_dir, proxy_url)。
+  - 执行链: SystemAddon → GitAddon → TorchAddon → ComfyAddon → UserdataAddon → NodesAddon → ModelAddon
 
-  ### 插件执行顺序
-  ```
-  SystemAddon → GitAddon → TorchAddon → ComfyAddon → UserdataAddon → NodesAddon → ModelAddon
-  ```
+  ### 目录与存储策略 (极重要)
+  - /root/autodl-tmp/: 数据盘。大文件、模型、持久化缓存必须存放于此。
+  - /root/ComfyUI/: 系统盘。仅限环境安装与代码运行。
 
-  ### 关键目录
-  - `src/core/`: 核心抽象 (interface, task, schema, ports, adapters)
-  - `src/addons/`: 各功能插件
-  - `src/lib/`: 可复用库 (download, network, utils)
-  - `/root/autodl-tmp/`: 数据盘 (持久化)
-  - `/root/ComfyUI/`: 系统盘 (ComfyUI 安装位置)
+  ### 幂等性与代码规范
+  - 所有方法必须通过 `ctx.state.is_completed()` 或前置物理状态检测（如文件是否存在）实现严格幂等。
+  - 必须包含完整的类型注解 (Type Hints) 和文件头 Docstring。
+  - 日志格式强制使用 `logger.info("  -> ...")`。
+  - 命名规范: 插件类名 `{Name}Addon`，Task 类名 `{Name}Task`，常量 `UPPER_SNAKE_CASE`。
 
-  ### 代码规范
-  - 所有函数必须有类型注解
-  - 文件头必须有 docstring
-  - 使用 `logger.info("  -> ...")` 格式日志
-  - 插件类名: `{Name}Addon`; Task 类名: `{Name}Task`
-  - 常量使用 `UPPER_SNAKE_CASE`
+  ### 🚫 反模式 (Anti-Patterns / DO NOT DO)
+  - 绝对禁止使用 `pip install`，必须使用 `uv pip install`。
+  - 绝对禁止硬编码绝对路径，路径必须从 `AppContext.artifacts` 读取。
+  - 禁止在 Task 外部（如 Addon 的 __init__ 中）执行具有副作用的 OS 级文件或网络操作。
 
-  ### 幂等性原则
-  - setup() 方法必须幂等，通过 `ctx.state.is_completed()` 或内部检测
-  - Task 使用内部幂等：检测物理状态决定是否执行
-
-# Per-artifact rules
 rules:
   proposal:
-    - 包含 "问题背景" 和 "解决方案" 章节
-    - 代码示例必须包含类型注解
-    - 考虑插件执行顺序依赖
-  tasks:
-    - 每个 Task 应在 5 分钟内完成
-    - 明确标注新建文件 vs 修改文件
-    - 包含验收标准 (可测试的条件)
+    - 强制包含 "问题背景"、"解决方案" 以及 "Non-goals (非目标)" 章节。
+    - 评估该变更对上下游插件执行顺序 (`执行链`) 的潜在影响。
+    - 字数控制在 300 词以内。
   specs:
-    - 使用中文描述，代码/术语保持英文
-    - 包含示例代码片段
+    - 使用中文描述业务逻辑，代码/术语/类名保持英文原始拼写。
+    - 必须包含目标状态的边界条件。
+    - 字数控制在 300 词以内。
+  design:
+    - 评估并发或网络失败时的异常处理策略。
+    - 如涉及执行顺序变更，说明对执行链的影响。
+  tasks:
+    - 将任务拆分为最大 10 分钟的代码块。
+    - 严格区分 "新建文件 (Create)" 和 "修改文件 (Update)"。
+    - 每个 Task 必须提供明确的 CLI 验证命令或状态断言标准。
+    - 字数控制在 300 词以内。
