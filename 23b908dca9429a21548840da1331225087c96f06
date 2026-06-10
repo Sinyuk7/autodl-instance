@@ -1,0 +1,238 @@
+tests/unit/test_status.py
+  a50fa3377b4a26ee 1-67
+src/addons/nodes/plugin.py
+  a50fa3377b4a26ee 10,208,214,226,228-232
+tests/unit/download/test_preflight.py
+  a50fa3377b4a26ee 1-131
+src/addons/models/tasks/generate_snapshot.py
+  a50fa3377b4a26ee 12-13,33-46,59,62,74
+src/addons/userdata/plugin.py
+  a50fa3377b4a26ee 10,97,104-107,110
+src/addons/models/plugin.py
+  a50fa3377b4a26ee 11,89,99-102,111,120-125
+src/addons/models/status.py
+  a50fa3377b4a26ee 1-65
+src/core/results.py
+  a50fa3377b4a26ee 1-70
+tests/unit/test_shutdown.py
+  a50fa3377b4a26ee 1-35
+README.md
+  a50fa3377b4a26ee 13,58,71-72,113,147,160-161,166,168-170,207
+tests/unit/test_pipeline.py
+  a50fa3377b4a26ee 15,87-127
+src/shutdown.py
+  a50fa3377b4a26ee 36-42,44-59,67
+src/addons/models/lock.py
+  a50fa3377b4a26ee 187-188
+tests/integration/test_setup_pipeline.py
+  a50fa3377b4a26ee 37
+tests/unit/addons/test_models_lock.py
+  a50fa3377b4a26ee 20-23,213-311
+src/addons/comfy_core/plugin.py
+  a50fa3377b4a26ee 152-167,184
+src/addons/models/config.py
+  a50fa3377b4a26ee 18-19,26-40,57-61,89
+src/status.py
+  a50fa3377b4a26ee 1-213
+src/lib/download/preflight.py
+  a50fa3377b4a26ee 1-211
+src/addons/models/downloader.py
+  a50fa3377b4a26ee 21,36,50-76,122-129,132-136,138,140-151,154-155,159-163,239,257-262,382-391,397-401,404,460-466,475-479,482-486,561-564,638
+src/addons/system/plugin.py
+  a50fa3377b4a26ee 91-102,140
+src/main.py
+  a50fa3377b4a26ee 16,131,142,158-168,177-186,201,237-244,248
+src/addons/userdata/strategy.py
+  a50fa3377b4a26ee 18,31,57,59-63,159,162-165,169-175,177,180-187,192-198,203,206-209
+src/lib/download/__init__.py
+  a50fa3377b4a26ee 21-26,36-40,47
+tests/unit/addons/test_userdata_strategy.py
+  a50fa3377b4a26ee 1-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "23b908dca9429a21548840da1331225087c96f06",
+  "prompts": {
+    "a50fa3377b4a26ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb094-4bc5-7b21-b194-eb9038eda404",
+        "model": "gpt-5.5"
+      },
+      "human_author": "sinyuk",
+      "messages": [],
+      "total_additions": 3249,
+      "total_deletions": 254,
+      "accepted_lines": 3188,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "src/addons/userdata/plugin.py": {
+          "additions": 7,
+          "deletions": 3,
+          "accepted_lines": 7
+        },
+        "docs/review/FACT_CHECK.md": {
+          "additions": 62,
+          "accepted_lines": 62
+        },
+        "REVIEW_GUIDE.md": {
+          "additions": 533,
+          "accepted_lines": 533
+        },
+        "docs/review/RFCS/rfc-005-node-version-locking.md": {
+          "additions": 54,
+          "accepted_lines": 54
+        },
+        "src/main.py": {
+          "additions": 36,
+          "deletions": 7,
+          "accepted_lines": 35
+        },
+        "src/status.py": {
+          "additions": 215,
+          "deletions": 2,
+          "accepted_lines": 213
+        },
+        "docs/review/RFCS/rfc-001-lock-path-and-status.md": {
+          "additions": 57,
+          "accepted_lines": 57
+        },
+        "src/addons/models/tasks/generate_snapshot.py": {
+          "additions": 20,
+          "deletions": 114,
+          "accepted_lines": 20
+        },
+        "tests/unit/test_status.py": {
+          "additions": 67,
+          "accepted_lines": 67
+        },
+        "docs/review/RFCS/rfc-004-cache-and-disk-preflight.md": {
+          "additions": 56,
+          "accepted_lines": 56
+        },
+        "REVIEW.md": {
+          "additions": 442,
+          "accepted_lines": 442
+        },
+        "src/addons/models/downloader.py": {
+          "additions": 169,
+          "deletions": 89,
+          "accepted_lines": 113
+        },
+        "docs/review/DECISIONS_NEEDED.md": {
+          "additions": 109,
+          "accepted_lines": 109
+        },
+        "src/addons/models/status.py": {
+          "additions": 65,
+          "accepted_lines": 65
+        },
+        "README.md": {
+          "additions": 13,
+          "deletions": 8,
+          "accepted_lines": 13
+        },
+        "tests/unit/test_pipeline.py": {
+          "additions": 43,
+          "accepted_lines": 43
+        },
+        "src/addons/system/plugin.py": {
+          "additions": 13,
+          "deletions": 1,
+          "accepted_lines": 13
+        },
+        "tests/unit/download/test_preflight.py": {
+          "additions": 131,
+          "accepted_lines": 131
+        },
+        "docs/review/REVIEW_v3.md": {
+          "additions": 326,
+          "accepted_lines": 326
+        },
+        "tests/unit/addons/test_models_lock.py": {
+          "additions": 107,
+          "deletions": 2,
+          "accepted_lines": 105
+        },
+        "src/addons/comfy_core/plugin.py": {
+          "additions": 17,
+          "deletions": 1,
+          "accepted_lines": 17
+        },
+        "tests/unit/addons/test_userdata_strategy.py": {
+          "additions": 50,
+          "accepted_lines": 50
+        },
+        "tests/integration/test_setup_pipeline.py": {
+          "additions": 1,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "src/core/results.py": {
+          "additions": 70,
+          "accepted_lines": 70
+        },
+        "src/addons/models/config.py": {
+          "additions": 23,
+          "deletions": 3,
+          "accepted_lines": 23
+        },
+        "src/lib/download/preflight.py": {
+          "additions": 211,
+          "accepted_lines": 211
+        },
+        "docs/review/RFCS/rfc-002-project-status-doctor.md": {
+          "additions": 54,
+          "accepted_lines": 54
+        },
+        "src/addons/models/plugin.py": {
+          "additions": 13,
+          "deletions": 3,
+          "accepted_lines": 13
+        },
+        "tests/unit/test_shutdown.py": {
+          "additions": 35,
+          "accepted_lines": 35
+        },
+        "src/addons/nodes/plugin.py": {
+          "additions": 9,
+          "deletions": 3,
+          "accepted_lines": 9
+        },
+        "src/shutdown.py": {
+          "additions": 25,
+          "deletions": 6,
+          "accepted_lines": 25
+        },
+        "docs/review/RFCS/rfc-003-sync-transaction-and-failure-semantics.md": {
+          "additions": 57,
+          "accepted_lines": 57
+        },
+        "src/lib/download/__init__.py": {
+          "additions": 12,
+          "deletions": 1,
+          "accepted_lines": 12
+        },
+        "docs/review/COMPETITOR_SCAN.md": {
+          "additions": 49,
+          "accepted_lines": 49
+        },
+        "docs/review/RFCS/rfc-006-workflow-model-dependency-status.md": {
+          "additions": 55,
+          "accepted_lines": 55
+        },
+        "src/addons/models/lock.py": {
+          "additions": 2,
+          "deletions": 1,
+          "accepted_lines": 2
+        },
+        "src/addons/userdata/strategy.py": {
+          "additions": 41,
+          "deletions": 9,
+          "accepted_lines": 41
+        }
+      }
+    }
+  }
+}
