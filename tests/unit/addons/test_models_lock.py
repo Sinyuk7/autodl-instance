@@ -17,6 +17,10 @@ from src.addons.models.lock import (
     write_meta,
     cleanup_orphan_metas,
 )
+from src.addons.models.tasks.generate_snapshot import GenerateSnapshotTask
+from src.addons.models.status import collect_lock_status
+from src.core.task import TaskResult
+from src.lib.utils import load_yaml, save_yaml, sha256
 
 
 # ── helpers ──────────────────────────────────────────────────
@@ -204,6 +208,107 @@ class TestGenerateSnapshot:
 
         snap = generate_snapshot(models, {})
         assert snap["models"][0]["model"] == "clip_l"
+
+
+class TestGenerateSnapshotTask:
+    """GenerateSnapshotTask 路径与 lock.py 复用行为"""
+
+    def test_writes_git_visible_lock_and_preserves_meta(self, app_context, tmp_path: Path):
+        """sync 产物应写到 my-comfyui-backup/model-lock.yaml 并保留 .meta 来源"""
+        project_root = tmp_path / "repo"
+        project_root.mkdir()
+        models = tmp_path / "models"
+        _create_model(models, "unet/flux.safetensors", b"flux")
+        _create_meta(models, "unet/flux.safetensors", {
+            "url": "https://huggingface.co/repo/resolve/main/flux.safetensors",
+            "model": "FLUX",
+            "source": "preset",
+        })
+
+        app_context.project_root = project_root
+        app_context.artifacts.models_dir = models
+
+        result = GenerateSnapshotTask().execute(app_context)
+
+        lock_file = project_root / "my-comfyui-backup" / "model-lock.yaml"
+        assert result == TaskResult.SUCCESS
+        assert lock_file.exists()
+        lock = load_yaml(lock_file)
+        entry = lock["models"][0]
+        assert entry["model"] == "FLUX"
+        assert entry["url"] == "https://huggingface.co/repo/resolve/main/flux.safetensors"
+        assert entry["source"] == "preset"
+        assert entry["type"] == "unet"
+
+    def test_reads_legacy_lock_as_incremental_baseline(self, app_context, tmp_path: Path):
+        """新路径不存在时，应读取旧数据盘根目录 lock 复用 hash"""
+        project_root = tmp_path / "repo"
+        project_root.mkdir()
+        base_dir = tmp_path / "base"
+        base_dir.mkdir()
+        models = tmp_path / "models"
+        model_file = _create_model(models, "unet/reuse.safetensors", b"reuse")
+        stat = model_file.stat()
+        legacy_lock = {
+            "models": [{
+                "model": "reuse",
+                "paths": [{"path": "unet/reuse.safetensors"}],
+                "hashes": [{"hash": "legacyhash", "type": "SHA256"}],
+                "_size": stat.st_size,
+                "_mtime": stat.st_mtime,
+            }]
+        }
+        save_yaml(base_dir / "model-lock.yaml", legacy_lock)
+
+        app_context.project_root = project_root
+        app_context.base_dir = base_dir
+        app_context.artifacts.models_dir = models
+
+        result = GenerateSnapshotTask().execute(app_context)
+
+        lock = load_yaml(project_root / "my-comfyui-backup" / "model-lock.yaml")
+        assert result == TaskResult.SUCCESS
+        assert lock["models"][0]["hashes"][0]["hash"] == "legacyhash"
+
+
+class TestCollectLockStatus:
+    """model status 三态判断"""
+
+    def test_reports_existing_missing_and_drifted(self, tmp_path: Path):
+        models = tmp_path / "models"
+        ok = _create_model(models, "unet/ok.safetensors", b"ok")
+        drift = _create_model(models, "unet/drift.safetensors", b"changed")
+        lock_file = tmp_path / "model-lock.yaml"
+        save_yaml(lock_file, {
+            "models": [
+                {
+                    "model": "ok",
+                    "paths": [{"path": "unet/ok.safetensors"}],
+                    "hashes": [{"hash": sha256(ok), "type": "SHA256"}],
+                    "type": "unet",
+                },
+                {
+                    "model": "missing",
+                    "paths": [{"path": "unet/missing.safetensors"}],
+                    "hashes": [{"hash": "missinghash", "type": "SHA256"}],
+                    "url": "https://example.com/missing.safetensors",
+                    "type": "unet",
+                },
+                {
+                    "model": "drift",
+                    "paths": [{"path": "unet/drift.safetensors"}],
+                    "hashes": [{"hash": "oldhash", "type": "SHA256"}],
+                    "type": "unet",
+                },
+            ]
+        })
+
+        statuses = {item["name"]: item for item in collect_lock_status(lock_file, models)}
+
+        assert statuses["ok"]["status"] == "存在"
+        assert statuses["missing"]["status"] == "缺失"
+        assert statuses["missing"]["url"] == "https://example.com/missing.safetensors"
+        assert statuses["drift"]["status"] == "漂移"
 
 
 # ── read_meta / write_meta ───────────────────────────────────

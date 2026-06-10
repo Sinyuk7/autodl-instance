@@ -10,7 +10,7 @@
 ## ✨ 特性
 
 - **快速部署** - 通过少量命令完成 ComfyUI 环境配置
-- **缓存管理** - 自动将缓存重定向至数据盘，节省系统盘空间
+- **状态诊断** - 提供 `status` / `doctor` 检查模型、Git、快照、网络和磁盘状态
 - **开箱即用** - 首次运行自动安装所需依赖
 - **无卡初始化** - 支持在无 GPU 模式下完成环境初始化
 - **模型管理** - 支持交互式下载，识别 HuggingFace/CivitAI 链接
@@ -36,7 +36,6 @@ chmod +x init.sh
 这将自动完成：
 - ✅ 安装 `uv` 极速包管理器
 - ✅ 安装 `comfy-cli` 官方 CLI 工具
-- ✅ 将 `.cache` 目录迁移至数据盘（避免系统盘爆满）
 - ✅ 配置 Git/SSH 环境
 - ✅ 部署 ComfyUI + ComfyUI-Manager
 - ✅ 安装预设的自定义节点
@@ -56,7 +55,7 @@ start
 bye
 ```
 
-自动保存自定义节点快照、模型下载记录、工作流文件以及用户配置，确保下次开机能完整还原工作环境。
+自动保存自定义节点快照、模型清单、工作流文件以及用户配置。`bye` 会在 Git 推送或模型清单生成失败时返回非 0；此时不要释放实例，先按错误提示处理。
 
 ---
 
@@ -69,6 +68,8 @@ bye
 | `start` | 启动 ComfyUI 服务 (附加 `--debug` 可开启调试模式) |
 | `bye` | 关机前同步 |
 | `model` | 模型下载管理 |
+| `status` | 快速检查工作区恢复状态 |
+| `doctor` | 深度诊断 Git、模型、网络、磁盘与缓存 |
 | `turbo` | 启用 AutoDL 学术加速（加速 GitHub/HuggingFace） |
 
 ## ⚙️ 可选配置
@@ -109,7 +110,7 @@ userdata_repo: "git@github.com:username/my-comfyui-backup.git"
 |---------|------|
 | 工作流 | ComfyUI 保存的 `.json` 工作流文件 |
 | 节点快照 | ComfyUI-Manager 生成的节点状态快照 |
-| 模型记录 | 已下载模型的清单 |
+| 模型记录 | 已下载模型的清单与来源，不包含模型本体 |
 | 用户配置 | ComfyUI 设置、节点偏好等 |
 
 > 如果不配置私有仓库，数据会保存在本地 `my-comfyui-backup` 目录，不影响正常使用。
@@ -143,7 +144,7 @@ FLUX.2-klein-9B:
     name: "my_lora.safetensors"
 ```
 
-已下载的模型自动跳过，不会重复下载。
+已下载的模型自动跳过，不会重复下载。下载前会做只读磁盘预检：能拿到远端大小时，空间不足会直接失败并提示下一步；远端大小未知时只 warning，仍继续交给 `aria2c` 下载。
 
 ### 管理模型
 
@@ -156,13 +157,17 @@ model cache          # 查看下载缓存大小
 model cache clear    # 清理全部下载缓存
 ```
 
+`model-lock.yaml` 是“曾经有什么 + 指纹 + 来源”的清单，不是下载任务表。工具不会在 `setup` / `start` / `bye` 中自动下载模型；缺失模型会在 `model status` 中提示，由用户手动执行下载。
+
 ### 下载策略
 
 | URL 来源 | 下载工具 | 特点 |
 |---------|---------|------|
-| HuggingFace | `huggingface_hub` + `hf_xet` | 官方 Hub API，版本感知缓存，xet 分块去重加速 |
+| HuggingFace | `aria2c` 多线程 | 支持 HF mirror / HF_TOKEN，断点续传 |
 | CivitAI | `aria2c` 多线程 | 自动解析模型信息，支持 API Token |
-| 直链 | `aria2c` 多线程 | 32 线程并发，断点续传 |
+| 直链 | `aria2c` 多线程 | 多线程并发，断点续传 |
+
+> `.cache` 不会被默认整体迁移。可通过 `doctor` 查看 HuggingFace / Torch / uv 等 cache 目录大小，再决定是否手动清理或迁移。
 
 ## 🔧 常见问题
 

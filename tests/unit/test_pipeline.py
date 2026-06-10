@@ -12,6 +12,7 @@ from pathlib import Path
 
 from src.main import create_pipeline, execute
 from src.core.interface import AppContext
+from src.core.results import PluginResult
 
 
 class TestCreatePipeline:
@@ -82,6 +83,48 @@ class TestExecute:
             execute("sync", ctx)
 
         assert called == ["comfy_core", "git_config", "system"]
+
+    def test_sync_collects_failures_and_continues(self, app_context):
+        """sync 插件异常应记录失败并继续执行后续插件"""
+        ctx = app_context
+        called = []
+
+        with patch("src.main.create_pipeline") as mock_pipeline:
+            first = MagicMock()
+            first.name = "first"
+            first.sync = MagicMock(side_effect=lambda ctx: called.append("first"))
+
+            failing = MagicMock()
+            failing.name = "failing"
+            failing.sync = MagicMock(side_effect=RuntimeError("boom"))
+
+            last = MagicMock()
+            last.name = "last"
+            last.sync = MagicMock(side_effect=lambda ctx: called.append("last"))
+
+            mock_pipeline.return_value = [last, failing, first]
+
+            result = execute("sync", ctx)
+
+        assert called == ["first", "last"]
+        assert not result.ok
+        assert result.failures[0].plugin == "failing"
+
+    def test_sync_records_plugin_warning(self, app_context):
+        """sync 插件返回 warning 时应记录但不失败"""
+        ctx = app_context
+
+        with patch("src.main.create_pipeline") as mock_pipeline:
+            addon = MagicMock()
+            addon.name = "nodes"
+            addon.sync = MagicMock(return_value=PluginResult.warning("snapshot failed"))
+            mock_pipeline.return_value = [addon]
+
+            result = execute("sync", ctx)
+
+        assert result.ok
+        assert result.warnings[0].plugin == "nodes"
+        assert result.warnings[0].message == "snapshot failed"
 
     def test_until_stops_at_target(self, app_context):
         """--until 应在目标插件后停止"""

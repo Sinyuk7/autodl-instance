@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, cast
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
+from src.core.results import PluginResult
 from src.core.utils import logger
 
 
@@ -204,13 +205,13 @@ class NodesAddon(BaseAddon):
         pass
 
     @hookimpl
-    def sync(self, context: AppContext) -> None:
+    def sync(self, context: AppContext) -> PluginResult:
         logger.info("\n>>> [Nodes] 保存节点快照...")
         ctx = context
         
         comfy_dir = ctx.artifacts.comfy_dir
         if not comfy_dir:
-            return
+            return PluginResult.skipped("ComfyUI 目录未初始化，跳过节点快照")
         
         try:
             ctx.cmd.run([
@@ -222,5 +223,10 @@ class NodesAddon(BaseAddon):
             if latest:
                 logger.info(f"  -> 快照已保存: {latest.name}")
                 self._cleanup_old_snapshots(ctx, keep=1)
+            return PluginResult.success("节点快照已保存")
         except Exception as e:
-            logger.error(f"  -> 快照保存失败: {e}")
+            logger.warning(f"  -> [WARN] 快照保存失败: {e}")
+            return PluginResult.warning(
+                f"节点快照保存失败: {e}",
+                "可稍后启动 ComfyUI-Manager 手动保存 snapshot，或检查 comfy-cli 是否可用",
+            )

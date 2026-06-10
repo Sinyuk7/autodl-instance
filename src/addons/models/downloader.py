@@ -8,9 +8,7 @@ from typing import Any, Dict, List, Optional
 # 确保 autodl_setup logger 有 handler（独立 CLI 运行时未经 main.py 初始化）
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-# 初始化网络环境 (加载代理、镜像、API Token)
 from src.lib.network import setup_network
-setup_network(verbose=True)
 
 # 导入核心模块
 from src.lib.download import (
@@ -20,6 +18,7 @@ from src.lib.download import (
     purge_cache,
 )
 from src.lib.download.civitai import resolve_civitai_url
+from src.lib.download.preflight import PreflightResult, prepare_download_preflight
 from src.lib.download.url_utils import detect_url_type
 from src.lib import ui
 from src.lib.utils import load_yaml, format_size
@@ -34,6 +33,7 @@ from src.addons.models.config import (
 )
 from src.addons.models.lock import write_meta
 from src.addons.models.schema import PresetsFile
+from src.addons.models.status import collect_lock_status
 
 
 def load_presets() -> PresetsFile:
@@ -45,6 +45,33 @@ def load_presets() -> PresetsFile:
     except ValidationError as e:
         ui.print_error(f"manifest.yaml 配置有误:\n{e}")
         sys.exit(1)
+
+
+def _print_actionable_error(what: str, reason: str, next_step: str) -> None:
+    ui.print_error(
+        f"{what}\n"
+        f"可能原因: {reason}\n"
+        f"下一步: {next_step}"
+    )
+
+
+def _report_preflight(label: str, result: PreflightResult) -> bool:
+    """输出下载预检结果；返回是否允许继续下载。"""
+    if result.ok:
+        if result.known_size:
+            ui.print_info(result.message)
+        else:
+            ui.print_warning(f"{label} 磁盘预检未能确认文件大小: {result.message}")
+            if result.next_step:
+                ui.print_info(f"下一步: {result.next_step}")
+        return True
+
+    _print_actionable_error(
+        f"{label} 下载前磁盘预检失败: {result.message}",
+        "数据盘可用空间小于模型剩余下载大小，或已有断点文件不足以继续完成下载。",
+        result.next_step or "清理 /root/autodl-tmp 后重试，或更换更大数据盘。",
+    )
+    return False
 
 
 # ============================================================
@@ -92,31 +119,48 @@ def cmd_list() -> None:
 # ============================================================
 # CLI 命令 - status
 # ============================================================
+def _status_label(status: str) -> str:
+    if status == "存在":
+        return "[green]存在[/green]"
+    if status == "漂移":
+        return "[yellow]漂移[/yellow]"
+    return "[red]缺失[/red]"
+
+
 def cmd_status() -> None:
     """显示 lock 文件中的记录 (使用 Rich 美化)"""
-    lock = load_yaml(LOCK_FILE)
-    models = lock.get("models", [])
-    
-    if not models:
-        ui.print_info("暂无模型记录 (model_lock.yaml)")
+    status_items = collect_lock_status()
+
+    if not status_items:
+        ui.print_info("暂无模型记录 (model-lock.yaml)")
+        ui.print_info(f"lock 路径: {LOCK_FILE}")
         return
-    
-    base = get_models_base()
+
     rows: List[List[str]] = []
-    
-    for m in models:
-        name = m.get("model", "?")
-        mtype = m.get("type", "?")
-        path = m.get("paths", [{}])[0].get("path", "")
-        exists = (base / path).exists() if path else False
-        status = "[green]✓[/green]" if exists else "[red]✗[/red]"
-        rows.append([status, name, mtype, path])
+    download_hints: List[str] = []
+
+    for item in status_items:
+        rows.append([
+            _status_label(item["status"]),
+            item["name"],
+            item["type"],
+            item["path"],
+            item["detail"],
+        ])
+        if item["status"] == "缺失" and item["url"]:
+            download_hints.append(f"model download {item['url']}")
     
     ui.print_table(
-        title=f"模型记录 ({len(models)} 个)",
-        columns=["状态", "名称", "类型", "路径"],
+        title=f"模型记录 ({len(status_items)} 个)",
+        columns=["状态", "名称", "类型", "路径", "说明"],
         rows=rows,
     )
+
+    if download_hints:
+        ui.console.print("")
+        ui.print_info("缺失模型可手动执行以下命令恢复（不会自动下载）：")
+        for hint in download_hints:
+            ui.console.print(f"  {hint}")
 
 
 # ============================================================
@@ -192,6 +236,7 @@ def cmd_download_interactive(url: str) -> None:
     suggested_subdir: Optional[str] = None
     download_url: str = url
     size_info: str = ""
+    known_size_bytes: Optional[int] = None
     civitai_info: Optional[Dict[str, Any]] = None  # 保存 CivitAI API 返回的完整信息
     
     ui.print_panel("下载模型", f"URL: {url}\n来源: {url_type.upper()}")
@@ -209,7 +254,12 @@ def cmd_download_interactive(url: str) -> None:
             download_url = resolved_url or url
             size_kb = info.get("size_kb", 0)
             if size_kb:
-                size_info = format_size(size_kb)
+                try:
+                    size_kb_int = int(size_kb)
+                    known_size_bytes = size_kb_int * 1024
+                    size_info = format_size(size_kb_int)
+                except (TypeError, ValueError):
+                    size_info = str(size_kb)
             
             ui.print_success(f"解析成功: {filename}")
             ui.print_info(f"类型: {info.get('model_type', '?')} → {suggested_type}")
@@ -329,16 +379,29 @@ def cmd_download_interactive(url: str) -> None:
         ui.print_info("已取消")
         return
     
-    # ========== Step 7: 执行下载 ==========
+    # ========== Step 7: 下载前预检 ==========
+    preflight = prepare_download_preflight(
+        download_url,
+        target_path,
+        known_size_bytes=known_size_bytes,
+    )
+    if not _report_preflight(filename, preflight):
+        sys.exit(1)
+
+    # ========== Step 8: 执行下载 ==========
     target_dir.mkdir(parents=True, exist_ok=True)
     
     ui.print_info("正在下载...")
     
     if not core_download(download_url, target_path):
-        ui.print_error("下载失败")
+        _print_actionable_error(
+            f"下载失败: {filename}",
+            "URL 失效、Token 缺失、网络/代理异常，或下载过程中磁盘空间被耗尽。",
+            f"检查 URL、HF_TOKEN/CIVITAI_API_TOKEN 和代理后重试: model download {url}",
+        )
         sys.exit(1)
     
-    # ========== Step 8: 写入 .meta sidecar ==========
+    # ========== Step 9: 写入 .meta sidecar ==========
     _write_download_meta(target_path, url=url, source=url_type, extra_info=civitai_info)
     
     ui.print_success(f"下载完成: {rel_path}")
@@ -392,9 +455,14 @@ def cmd_download_preset(preset_name: str) -> None:
             skip_count += 1
             continue
 
-        target.parent.mkdir(parents=True, exist_ok=True)
-
         ui.console.print(f"\n[bold blue]>>> 下载 {name}[/bold blue]")
+
+        preflight = prepare_download_preflight(entry.url, target)
+        if not _report_preflight(name, preflight):
+            fail_count += 1
+            continue
+
+        target.parent.mkdir(parents=True, exist_ok=True)
 
         if core_download(entry.url, target):
             if target.exists():
@@ -404,10 +472,18 @@ def cmd_download_preset(preset_name: str) -> None:
                 ui.print_success(f"[{name}] 完成")
                 success_count += 1
             else:
-                ui.print_error(f"[{name}] 下载后文件未找到")
+                _print_actionable_error(
+                    f"[{name}] 下载后文件未找到",
+                    "下载器返回成功但目标文件不存在，可能是目标路径被移动、磁盘异常或下载器输出路径变化。",
+                    f"检查目标目录后重试: model download {entry.url}",
+                )
                 fail_count += 1
         else:
-            ui.print_error(f"[{name}] 下载失败")
+            _print_actionable_error(
+                f"[{name}] 下载失败",
+                "URL 失效、Token 缺失、网络/代理异常，或下载过程中磁盘空间被耗尽。",
+                f"检查 URL、HF_TOKEN/CIVITAI_API_TOKEN 和代理后重试: model download {entry.url}",
+            )
             fail_count += 1
 
     ui.console.print("")
@@ -482,6 +558,10 @@ def cmd_cache_clear(force: bool = False) -> None:
 # 入口
 # ============================================================
 def main() -> None:
+    # 初始化网络环境 (加载代理、镜像、API Token)
+    # 注意：不要在模块 import 时执行，status/doctor 会复用本模块的只读 helper。
+    setup_network(verbose=True)
+
     parser = argparse.ArgumentParser(
         description="ComfyUI 模型管理器 (交互式)",
         formatter_class=argparse.RawDescriptionHelpFormatter,

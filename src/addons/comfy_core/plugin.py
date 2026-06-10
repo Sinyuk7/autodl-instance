@@ -149,6 +149,22 @@ class ComfyAddon(BaseAddon):
         
         comfy_dir = ctx.artifacts.comfy_dir or self._get_comfy_dir(ctx)
         port = self.DEFAULT_PORT
+
+        try:
+            from src.status import collect_quick_checks
+
+            checks = collect_quick_checks(
+                project_root=ctx.project_root,
+                base_dir=ctx.base_dir,
+                comfy_dir=comfy_dir,
+            )
+            problems = [check for check in checks if check.is_problem]
+            if problems:
+                logger.warning("  -> [WARN] 启动前状态检查发现问题，但不会阻塞启动：")
+                for check in problems:
+                    logger.warning(f"     [{check.status}] {check.name}: {check.detail}")
+        except Exception as e:
+            logger.warning(f"  -> [WARN] 启动前状态检查失败，继续启动: {e}")
         
         release_port(port)
         

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import  List, cast
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
+from src.core.results import PluginResult
 from src.core.utils import logger
 
 from .strategy import GitRepoStrategy, LocalStrategy, SyncStrategy
@@ -93,14 +94,17 @@ class UserdataAddon(BaseAddon):
         pass
 
     @hookimpl
-    def sync(self, context: AppContext) -> None:
+    def sync(self, context: AppContext) -> PluginResult:
         """同步：推送数据变更"""
         logger.info("\n>>> [Userdata] 同步用户数据...")
         ctx = context
         
         data_dir = ctx.project_root / self.DATA_DIR_NAME
         if not data_dir.exists():
-            return
+            return PluginResult.failure(
+                f"用户数据目录不存在: {data_dir}",
+                "请先运行 ./init.sh，确认 userdata_repo 或本地 my-comfyui-backup 初始化成功",
+            )
         
         strategy = self._get_strategy(ctx)
-        strategy.push(data_dir, ctx)
+        return strategy.push(data_dir, ctx)

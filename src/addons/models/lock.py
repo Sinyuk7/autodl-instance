@@ -184,6 +184,8 @@ def generate_snapshot(
         # url: 可选，来自 meta
         if item.get("url"):
             entry["url"] = item["url"]
+        if item.get("source"):
+            entry["source"] = item["source"]
 
         entry["paths"] = [{"path": rel_path}]
         entry["hashes"] = [{"hash": file_hash, "type": "SHA256"}]
@@ -237,5 +239,4 @@ def cleanup_orphan_metas(models_base: Path) -> int:
                 pass
 
     return cleaned
-
 

@@ -8,6 +8,7 @@ Models Addon - ComfyUI 模型目录管理
 from pathlib import Path
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
+from src.core.results import PluginResult
 from src.core.task import TaskRunner
 from src.core.utils import logger
 
@@ -85,7 +86,7 @@ class ModelAddon(BaseAddon):
         pass
 
     @hookimpl
-    def sync(self, context: AppContext) -> None:
+    def sync(self, context: AppContext) -> PluginResult:
         """同步钩子：运行 Sync 阶段 Task"""
         logger.info("\n>>> [Models] 开始同步模型数据...")
 
@@ -95,7 +96,10 @@ class ModelAddon(BaseAddon):
         
         if not models_dir.exists():
             logger.warning("  -> [WARN] 模型目录不存在，跳过")
-            return
+            return PluginResult.warning(
+                f"模型目录不存在: {models_dir}",
+                "请先运行 ./init.sh，确认 ComfyUI/models 已软链接到数据盘",
+            )
 
         # 运行 Sync Tasks
         from src.addons.models.tasks import (
@@ -104,7 +108,7 @@ class ModelAddon(BaseAddon):
             GenerateSnapshotTask,
         )
         
-        TaskRunner.run_tasks(
+        ok = TaskRunner.run_tasks(
             tasks=[
                 CheckOrphanFilesTask(),
                 CleanupOrphanMetasTask(),
@@ -113,3 +117,9 @@ class ModelAddon(BaseAddon):
             ctx=context,
             addon_name="Models"
         )
+        if not ok:
+            return PluginResult.failure(
+                "模型同步任务失败，model-lock.yaml 可能没有更新",
+                "请查看 /root/autodl-tmp/autodl-setup.log，修复后重新运行 bye",
+            )
+        return PluginResult.success("模型数据同步完成")

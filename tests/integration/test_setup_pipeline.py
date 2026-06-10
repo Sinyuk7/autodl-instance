@@ -34,7 +34,7 @@ class TestSetupUntilSystem:
         execute("setup", context_with_home, until="system")
         
         bin_dir = context_with_home.artifacts.bin_dir
-        expected_scripts = ["turbo", "bye", "model", "start"]
+        expected_scripts = ["turbo", "bye", "model", "status", "doctor", "start"]
         
         for script in expected_scripts:
             assert (bin_dir / script).exists(), f"脚本 {script} 未创建"

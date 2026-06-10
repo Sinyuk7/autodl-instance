@@ -88,6 +88,18 @@ class SystemAddon(BaseAddon):
                 cd {project_dir}
                 python -m src.addons.models.downloader "$@"
             """),
+            "status": dedent(f"""\
+                #!/bin/bash
+                # AutoDL 工作区状态检查 - 自动生成，请勿手动修改
+                cd {project_dir}
+                python -m src.status status "$@"
+            """),
+            "doctor": dedent(f"""\
+                #!/bin/bash
+                # AutoDL 工作区深度诊断 - 自动生成，请勿手动修改
+                cd {project_dir}
+                python -m src.status doctor "$@"
+            """),
             "start": dedent(f"""\
                 #!/bin/bash
                 # ComfyUI 启动命令 - 自动生成，请勿手动修改

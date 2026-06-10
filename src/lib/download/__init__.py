@@ -18,6 +18,12 @@ from src.lib.download.url_utils import (
     detect_url_type,
     extract_filename_from_url,
 )
+from src.lib.download.preflight import (
+    PreflightResult,
+    check_disk_space,
+    estimate_remote_size,
+    prepare_download_preflight,
+)
 from src.lib.download.base import CacheEntry, PurgeResult
 
 __all__ = [
@@ -27,6 +33,11 @@ __all__ = [
     # URL 工具
     "detect_url_type",
     "extract_filename_from_url",
+    # 下载预检
+    "PreflightResult",
+    "check_disk_space",
+    "estimate_remote_size",
+    "prepare_download_preflight",
     # 缓存管理
     "cache_info",
     "purge_cache",

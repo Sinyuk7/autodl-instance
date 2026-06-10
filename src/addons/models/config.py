@@ -15,11 +15,27 @@ from typing import List
 ADDON_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = ADDON_DIR.parent.parent.parent
 PRESETS_FILE = ADDON_DIR / "manifest.yaml"
-LOCK_FILE = PROJECT_ROOT / "my-comfyui-backup" / "model-lock.yaml"
+USERDATA_DIR_NAME = "my-comfyui-backup"
+LOCK_FILE_NAME = "model-lock.yaml"
 
 # 与 main.py 保持一致的基础目录
 _BASE_DIR = Path("/root/autodl-tmp")
 _MODELS_DIR_NAME = "models"
+
+
+def get_lock_file(project_root: Path | None = None) -> Path:
+    """获取 Git 可同步的 model-lock.yaml 路径。"""
+    root = project_root or PROJECT_ROOT
+    return root / USERDATA_DIR_NAME / LOCK_FILE_NAME
+
+
+def get_legacy_lock_file(base_dir: Path | None = None) -> Path:
+    """获取旧版本写入的数据盘根目录 lock 路径，用于一次性兼容读取。"""
+    base = base_dir or _BASE_DIR
+    return base / LOCK_FILE_NAME
+
+
+LOCK_FILE = get_lock_file()
 
 
 # ============================================================
@@ -38,7 +54,11 @@ def get_models_base(fallback: Path | None = None) -> Path:
     if env_path:
         return Path(env_path)
     
-    # 2. 默认使用 /root/autodl-tmp/models/ (与 main.py BASE_DIR 一致)
+    # 2. 测试或诊断可传入 fallback
+    if fallback is not None:
+        return fallback
+
+    # 3. 默认使用 /root/autodl-tmp/models/ (与 main.py BASE_DIR 一致)
     return _BASE_DIR / _MODELS_DIR_NAME
 
 

@@ -33,11 +33,30 @@ def main() -> None:
     # sync 需要加载 setup 阶段持久化的 artifacts
     context = create_context(debug=args.debug, load_artifacts=True)
     
-    # 执行 sync 动作 (execute 内部会自动逆序执行)
-    execute("sync", context)
-    
-    # 停止代理进程（如果有 mihomo 在运行）
-    stop_proxy()
+    result = None
+    try:
+        # 执行 sync 动作 (execute 内部会自动逆序执行)
+        result = execute("sync", context)
+    finally:
+        # 停止代理进程（如果有 mihomo 在运行）
+        stop_proxy()
+
+    if result and result.warnings:
+        logger.warning("\n>>> 同步完成，但有警告：")
+        for issue in result.warnings:
+            logger.warning(f"  -> [{issue.plugin}] {issue.message}")
+            if issue.next_step:
+                logger.warning(f"     下一步: {issue.next_step}")
+
+    if result and not result.ok:
+        logger.error("\n" + "=" * 50)
+        logger.error("❌ 同步失败：请不要释放实例，除非确认本地数据不需要保留。")
+        for issue in result.failures:
+            logger.error(f"  -> [{issue.plugin}] {issue.message}")
+            if issue.next_step:
+                logger.error(f"     下一步: {issue.next_step}")
+        logger.error("=" * 50)
+        raise SystemExit(1)
 
     logger.info("\n" + "=" * 50)
     logger.info("✅ 同步完成！您可以安全关闭机器了。")

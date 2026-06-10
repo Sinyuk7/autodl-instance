@@ -15,6 +15,7 @@ from typing import List
 
 from src.core.interface import AppContext as Context
 from src.core.ports import ICommandRunner
+from src.core.results import PluginResult
 from src.core.utils import logger
 
 
@@ -27,7 +28,7 @@ class SyncStrategy(ABC):
         pass
     
     @abstractmethod
-    def push(self, data_dir: Path, context: Context) -> None:
+    def push(self, data_dir: Path, context: Context) -> PluginResult:
         """推送数据变更（同步阶段）"""
         pass
 
@@ -53,9 +54,13 @@ class LocalStrategy(SyncStrategy):
         shutil.copytree(self.example_dir, data_dir)
         return True
     
-    def push(self, data_dir: Path, context: Context) -> None:
+    def push(self, data_dir: Path, context: Context) -> PluginResult:
         logger.info(f"  -> 数据已保存在本地: {data_dir}")
-        logger.info(f"  -> 提示: 配置 sync.userdata_repo 可启用云端备份")
+        logger.info(f"  -> 提示: 配置 userdata_repo 可启用云端备份")
+        return PluginResult.warning(
+            "用户数据仅保存在本地，未推送到远程仓库",
+            "如需跨实例恢复，请配置 src/addons/userdata/manifest.yaml 中的 userdata_repo",
+        )
 
 
 class GitRepoStrategy(SyncStrategy):
@@ -151,27 +156,54 @@ class GitRepoStrategy(SyncStrategy):
             return False
         return True
     
-    def push(self, data_dir: Path, context: Context) -> None:
+    def push(self, data_dir: Path, context: Context) -> PluginResult:
         if not self._is_git_repo(data_dir):
             logger.warning(f"  -> 非 Git 仓库，跳过推送")
-            return
+            return PluginResult.warning(
+                "my-comfyui-backup 不是 Git 仓库，跳过远端同步",
+                f"检查 {data_dir} 是否由 userdata_repo clone 得到",
+            )
         
         # 检查变更
         ok, status = self._run_git(["status", "--porcelain"], data_dir)
-        if not ok or not status:
+        if not ok:
+            logger.error(f"  -> Git status 失败: {status}")
+            return PluginResult.failure(
+                f"Git status 失败: {status}",
+                f"请运行: cd {data_dir} && git status",
+            )
+        if not status:
             logger.info(f"  -> 无变更需要同步")
-            return
+            return PluginResult.success("无变更需要同步")
         
         # Add + Commit + Push
-        self._run_git(["add", "."], data_dir)
+        ok, msg = self._run_git(["add", "."], data_dir)
+        if not ok:
+            logger.error(f"  -> Git add 失败: {msg}")
+            return PluginResult.failure(
+                f"Git add 失败: {msg}",
+                f"请运行: cd {data_dir} && git status",
+            )
+
         commit_msg = self._get_commit_message()
         ok, msg = self._run_git(["commit", "-m", commit_msg], data_dir)
         if not ok and "nothing to commit" not in msg:
             logger.error(f"  -> Git commit 失败: {msg}")
-            return
+            return PluginResult.failure(
+                f"Git commit 失败: {msg}",
+                f"请运行: cd {data_dir} && git status",
+            )
+        if not ok and "nothing to commit" in msg:
+            logger.info(f"  -> 无变更需要提交")
+            return PluginResult.success("无变更需要提交")
         
         ok, msg = self._run_git(["push"], data_dir)
         if ok:
             logger.info(f"  -> 已同步到远程仓库")
+            return PluginResult.success("已同步到远程仓库")
         else:
             logger.error(f"  -> Git push 失败: {msg}")
+            return PluginResult.failure(
+                f"Git push 失败: {msg}",
+                f"请运行: cd {data_dir} && git status && git push",
+            )

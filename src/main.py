@@ -13,6 +13,7 @@ import yaml
 from src.core.interface import AppContext, BaseAddon
 from src.core.adapters import SubprocessRunner, FileStateManager
 from src.core.artifacts import Artifacts
+from src.core.results import PipelineResult, PluginResult
 from src.core.utils import setup_logger, logger, kill_process_by_name
 from src.lib.network import setup_network, sync_proxy_config, invalidate_network_cache
 
@@ -127,7 +128,7 @@ def execute(
     context: AppContext, 
     until: Optional[str] = None,
     only: Optional[str] = None,
-) -> None:
+) -> PipelineResult:
     """
     执行插件 Pipeline
     
@@ -138,6 +139,7 @@ def execute(
         only: 只执行指定插件（跳过依赖，危险模式）
     """
     pipeline = create_pipeline()
+    result = PipelineResult(action=action)
     
     # sync 动作逆序执行
     if action == "sync":
@@ -153,8 +155,17 @@ def execute(
         logger.info(f"\n>>> 单独执行: {addon.name}.{action}()")
         method = getattr(addon, action, None)
         if method:
-            method(context)
-        return
+            try:
+                plugin_result = method(context)
+                if action == "sync" and isinstance(plugin_result, PluginResult):
+                    result.add_plugin_result(addon.name, plugin_result)
+            except Exception as e:
+                if action == "sync":
+                    logger.error(f"  -> [{addon.name}] sync 失败: {e}")
+                    result.add_failure(addon.name, str(e))
+                    return result
+                raise
+        return result
     
     # 正常顺序执行
     logger.info(f"\n>>> 开始执行 Pipeline: [{action.upper()}]")
@@ -163,7 +174,16 @@ def execute(
         logger.info(f"  -> {addon.name}")
         method = getattr(addon, action, None)
         if method:
-            method(context)
+            try:
+                plugin_result = method(context)
+                if action == "sync" and isinstance(plugin_result, PluginResult):
+                    result.add_plugin_result(addon.name, plugin_result)
+            except Exception as e:
+                if action == "sync":
+                    logger.error(f"  -> [{addon.name}] sync 失败: {e}")
+                    result.add_failure(addon.name, str(e))
+                    continue
+                raise
         
         # --until: 执行到指定插件停止
         if until and addon.name == until:
@@ -177,6 +197,8 @@ def execute(
             logger.info("  -> Artifacts 已持久化")
         except Exception as e:
             logger.error(f"  -> Artifacts 持久化失败: {e}")
+
+    return result
 
 
 def main() -> None:
@@ -212,7 +234,14 @@ def main() -> None:
     if args.action == "sync":
         sync_proxy_config()
 
-    execute(args.action, context, until=args.until, only=args.only)
+    result = execute(args.action, context, until=args.until, only=args.only)
+    if args.action == "sync" and not result.ok:
+        logger.error("\n>>> 同步失败：")
+        for issue in result.failures:
+            logger.error(f"  -> [{issue.plugin}] {issue.message}")
+            if issue.next_step:
+                logger.error(f"     下一步: {issue.next_step}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
