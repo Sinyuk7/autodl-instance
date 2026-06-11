@@ -1,0 +1,469 @@
+src/lib/network/manager.py
+  fa6f393722f0c2b0 68-69
+  8c26cfc3db027334 7,38,72-75,79,82,88-93,108
+tests/unit/test_main.py
+  fa6f393722f0c2b0 13,16,42-43,46-51,91-103,105,107-108,112,117,119-120,124,127-128,132-178,184,186-197,243-252,254-255,264
+docs/archive/review/RFCS/rfc-007-code-package-and-data-repo-split.md
+  8c26cfc3db027334 1-212
+src/core/interface.py
+  fa6f393722f0c2b0 6,50-56,58-67,102
+src/addons/models/tasks/generate_snapshot.py
+  fa6f393722f0c2b0 29,33
+tests/unit/test_runtime.py
+  8c26cfc3db027334 5,34,49-58,67-78
+  fa6f393722f0c2b0 1-4,6-33,35-48,59-66,79-89
+src/addons/models/tasks/migrate_existing_models.py
+  fa6f393722f0c2b0 38
+docs/archive/review/DECISIONS_NEEDED.md
+  8c26cfc3db027334 1-133
+src/main.py
+  8c26cfc3db027334 22,131-132,136
+  fa6f393722f0c2b0 8,18-21,23-25,42-43,74-93,107-108,121-130,133-135,137-147,158-160,164,168-177,179,182,184-185,258-260,277-279
+src/addons/models/plugin.py
+  8c26cfc3db027334 101
+  fa6f393722f0c2b0 42
+tests/unit/addons/test_models_lock.py
+  fa6f393722f0c2b0 228,230,235,265,267,273
+tests/unit/test_shutdown.py
+  fa6f393722f0c2b0 2,10-23,28-29,31,42,44-45,47
+src/addons/models/tasks/check_orphan_files.py
+  fa6f393722f0c2b0 28,104
+pyproject.toml
+  fa6f393722f0c2b0 1-44
+src/lib/network/token.py
+  8c26cfc3db027334 8-9,15-16,20,26,32
+tests/unit/addons/test_system_addon.py
+  fa6f393722f0c2b0 33
+  8c26cfc3db027334 36-40
+src/addons/git_config/plugin.py
+  8c26cfc3db027334 19-34,54-66,70,139-144,225
+src/shutdown.py
+  8c26cfc3db027334 6-7
+  fa6f393722f0c2b0 12-13,15,24-26,41
+src/lib/download/manifest.yaml
+  8c26cfc3db027334 4,36
+CONTRIBUTING.md
+  8c26cfc3db027334 32,34,36-39,41,43-47,49,51,53,55-58
+src/lib/network/proxy/secrets.yaml.example
+  8c26cfc3db027334 1-7
+README.md
+  fa6f393722f0c2b0 13,24,42,48,90-91,97
+  8c26cfc3db027334 6,8,10,16,19,22,25-28,31,34-35,38,41,45,51,53,57-64,66,68,71-74,77,80,83,85,87,94,100,103-107,110,112,114,117-118,121,123,125,127
+src/addons/models/tasks/setup_models_symlink.py
+  fa6f393722f0c2b0 23
+tests/unit/addons/test_git_addon.py
+  8c26cfc3db027334 125-162
+src/addons/system/plugin.py
+  8c26cfc3db027334 70-91,94-99
+  fa6f393722f0c2b0 66-67
+tests/unit/test_cli.py
+  8c26cfc3db027334 8,47-120
+  fa6f393722f0c2b0 1-7,9-46
+src/addons/models/config.py
+  fa6f393722f0c2b0 25,27-32,59,64-65,67
+src/cli.py
+  8c26cfc3db027334 5-6,11-12,14,19-20,23-25,28-29,31-33,35,38-43,46-60,78,85-115,117,119-173,227-252,282,284-295
+  fa6f393722f0c2b0 1-4,7-10,13,15-18,21-22,26-27,30,34,36-37,44-45,61-77,79-84,116,118,174-226,253-281,283,296-333
+src/addons/userdata/manifest.yaml
+  8c26cfc3db027334 14-15
+tests/unit/test_status.py
+  fa6f393722f0c2b0 15-22,34,51-58,70,77-84
+  8c26cfc3db027334 2,90-158
+src/addons/comfy_core/plugin.py
+  fa6f393722f0c2b0 159-160
+src/lib/network/proxy/manifest.yaml
+  8c26cfc3db027334 3,24
+src/core/runtime.py
+  fa6f393722f0c2b0 1-24,28-32,49,51-61,63,65-78,84-85,91-93,99-103,105-107,109-144,146,148-155,181-208
+  8c26cfc3db027334 25-27,33-48,50,62,64,79-83,86-90,94-98,104,108,145,147,156-180
+tests/unit/addons/test_userdata_addon.py
+  8c26cfc3db027334 58-71
+  fa6f393722f0c2b0 1-57
+src/status.py
+  fa6f393722f0c2b0 33-36,92-94,98-99,102-103,108,119-121,175-177,181-189,264,266-276,278-288
+  8c26cfc3db027334 17-26,100-101,109-118,139-144,147,190,202-204,216-224
+src/lib/network/proxy/config.py
+  8c26cfc3db027334 120
+tests/unit/test_docs_gate.py
+  8c26cfc3db027334 1-36
+src/lib/download/secrets.yaml.example
+  8c26cfc3db027334 1-8
+init.sh
+  8c26cfc3db027334 2,4-15
+src/addons/userdata/plugin.py
+  8c26cfc3db027334 26,117
+  fa6f393722f0c2b0 11,29-30,32-34,73,75-76,83-91,113
+scripts/sync_clash_profile.py
+  fa6f393722f0c2b0 14,18,20
+  8c26cfc3db027334 220-221,319-320,343-346
+src/lib/network/__init__.py
+  8c26cfc3db027334 15,20,22
+src/addons/models/tasks/cleanup_orphan_metas.py
+  fa6f393722f0c2b0 27,77
+src/addons/userdata/strategy.py
+  8c26cfc3db027334 62
+  fa6f393722f0c2b0 147,153-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "1eaf9791151b07dcd6d52c1956372a2370590a57",
+  "prompts": {
+    "8c26cfc3db027334": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb4af-c475-7322-986e-0daed1908053",
+        "model": "gpt-5.5"
+      },
+      "human_author": "sinyuk",
+      "messages": [],
+      "total_additions": 1136,
+      "total_deletions": 418,
+      "accepted_lines": 1106,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "src/addons/system/plugin.py": {
+          "additions": 47,
+          "deletions": 83,
+          "accepted_lines": 28
+        },
+        "CONTRIBUTING.md": {
+          "additions": 27,
+          "deletions": 39,
+          "accepted_lines": 27
+        },
+        "tests/unit/test_runtime.py": {
+          "additions": 24,
+          "accepted_lines": 24
+        },
+        "tests/unit/addons/test_system_addon.py": {
+          "additions": 5,
+          "deletions": 1,
+          "accepted_lines": 5
+        },
+        "src/lib/download/secrets.yaml.example": {
+          "additions": 8,
+          "deletions": 14,
+          "accepted_lines": 8
+        },
+        "src/lib/network/proxy/config.py": {
+          "additions": 1,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "src/cli.py": {
+          "additions": 169,
+          "deletions": 8,
+          "accepted_lines": 164
+        },
+        "init.sh": {
+          "additions": 14,
+          "deletions": 5,
+          "accepted_lines": 14
+        },
+        "src/lib/network/__init__.py": {
+          "additions": 3,
+          "deletions": 3,
+          "accepted_lines": 3
+        },
+        "docs/archive/review/DECISIONS_NEEDED.md": {
+          "additions": 133,
+          "accepted_lines": 133
+        },
+        "src/addons/models/plugin.py": {
+          "additions": 1,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "src/addons/git_config/plugin.py": {
+          "additions": 37,
+          "deletions": 8,
+          "accepted_lines": 37
+        },
+        "tests/unit/addons/test_git_addon.py": {
+          "additions": 38,
+          "accepted_lines": 38
+        },
+        "src/addons/userdata/plugin.py": {
+          "additions": 2,
+          "deletions": 3,
+          "accepted_lines": 2
+        },
+        "README.md": {
+          "additions": 53,
+          "deletions": 168,
+          "accepted_lines": 53
+        },
+        "tests/unit/test_status.py": {
+          "additions": 70,
+          "accepted_lines": 70
+        },
+        "src/main.py": {
+          "additions": 5,
+          "deletions": 4,
+          "accepted_lines": 4
+        },
+        "src/lib/network/proxy/manifest.yaml": {
+          "additions": 2,
+          "deletions": 2,
+          "accepted_lines": 2
+        },
+        "src/lib/download/manifest.yaml": {
+          "additions": 2,
+          "deletions": 2,
+          "accepted_lines": 2
+        },
+        "src/addons/userdata/manifest.yaml": {
+          "additions": 2,
+          "deletions": 8,
+          "accepted_lines": 2
+        },
+        "tests/unit/test_cli.py": {
+          "additions": 75,
+          "deletions": 1,
+          "accepted_lines": 75
+        },
+        "src/lib/network/token.py": {
+          "additions": 7,
+          "deletions": 20,
+          "accepted_lines": 7
+        },
+        "src/shutdown.py": {
+          "additions": 2,
+          "deletions": 2,
+          "accepted_lines": 2
+        },
+        "scripts/sync_clash_profile.py": {
+          "additions": 8,
+          "deletions": 7,
+          "accepted_lines": 8
+        },
+        "src/lib/network/manager.py": {
+          "additions": 17,
+          "deletions": 8,
+          "accepted_lines": 17
+        },
+        "src/core/runtime.py": {
+          "additions": 66,
+          "deletions": 5,
+          "accepted_lines": 66
+        },
+        "src/status.py": {
+          "additions": 48,
+          "deletions": 10,
+          "accepted_lines": 43
+        },
+        "tests/unit/test_docs_gate.py": {
+          "additions": 36,
+          "accepted_lines": 36
+        },
+        "tests/unit/addons/test_userdata_addon.py": {
+          "additions": 14,
+          "accepted_lines": 14
+        },
+        "src/addons/userdata/strategy.py": {
+          "additions": 1,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "src/lib/network/proxy/secrets.yaml.example": {
+          "additions": 7,
+          "deletions": 14,
+          "accepted_lines": 7
+        },
+        "docs/archive/review/RFCS/rfc-007-code-package-and-data-repo-split.md": {
+          "additions": 212,
+          "accepted_lines": 212
+        }
+      }
+    },
+    "a50fa3377b4a26ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb094-4bc5-7b21-b194-eb9038eda404",
+        "model": "gpt-5.5"
+      },
+      "human_author": "sinyuk",
+      "messages": [],
+      "total_additions": 1211,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "docs/review/DECISIONS_NEEDED.md": {
+          "additions": 24
+        },
+        "REVIEW.md": {
+          "additions": 442
+        },
+        "REVIEW_GUIDE.md": {
+          "additions": 533
+        },
+        "docs/review/RFCS/rfc-007-code-package-and-data-repo-split.md": {
+          "additions": 212
+        }
+      }
+    },
+    "fa6f393722f0c2b0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb129-cdce-7252-b797-2101c0868e78",
+        "model": "gpt-5.5"
+      },
+      "human_author": "sinyuk",
+      "messages": [],
+      "total_additions": 1047,
+      "total_deletions": 166,
+      "accepted_lines": 912,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "src/addons/comfy_core/plugin.py": {
+          "additions": 2,
+          "accepted_lines": 2
+        },
+        "tests/unit/test_main.py": {
+          "additions": 107,
+          "deletions": 13,
+          "accepted_lines": 107
+        },
+        "src/addons/models/config.py": {
+          "additions": 12,
+          "deletions": 7,
+          "accepted_lines": 12
+        },
+        "src/addons/models/tasks/migrate_existing_models.py": {
+          "additions": 1,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "src/addons/models/tasks/setup_models_symlink.py": {
+          "additions": 1,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "src/addons/system/plugin.py": {
+          "additions": 49,
+          "deletions": 22,
+          "accepted_lines": 2
+        },
+        "init.sh": {
+          "additions": 1,
+          "deletions": 1
+        },
+        "src/lib/network/manager.py": {
+          "additions": 3,
+          "deletions": 8,
+          "accepted_lines": 2
+        },
+        "src/addons/models/tasks/generate_snapshot.py": {
+          "additions": 2,
+          "deletions": 2,
+          "accepted_lines": 2
+        },
+        "tests/unit/addons/test_userdata_addon.py": {
+          "additions": 57,
+          "accepted_lines": 57
+        },
+        "src/status.py": {
+          "additions": 51,
+          "deletions": 10,
+          "accepted_lines": 50
+        },
+        "src/addons/models/plugin.py": {
+          "additions": 1,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "tests/unit/addons/test_system_addon.py": {
+          "additions": 2,
+          "deletions": 1,
+          "accepted_lines": 1
+        },
+        "src/core/interface.py": {
+          "additions": 25,
+          "deletions": 6,
+          "accepted_lines": 21
+        },
+        "src/addons/userdata/plugin.py": {
+          "additions": 25,
+          "deletions": 13,
+          "accepted_lines": 21
+        },
+        "tests/unit/test_status.py": {
+          "additions": 26,
+          "deletions": 5,
+          "accepted_lines": 26
+        },
+        "README.md": {
+          "additions": 68,
+          "deletions": 31,
+          "accepted_lines": 15
+        },
+        "src/cli.py": {
+          "additions": 173,
+          "deletions": 1,
+          "accepted_lines": 169
+        },
+        "src/core/runtime.py": {
+          "additions": 149,
+          "deletions": 2,
+          "accepted_lines": 142
+        },
+        "tests/unit/test_runtime.py": {
+          "additions": 65,
+          "accepted_lines": 65
+        },
+        "tests/unit/test_cli.py": {
+          "additions": 51,
+          "deletions": 5,
+          "accepted_lines": 45
+        },
+        "src/addons/userdata/strategy.py": {
+          "additions": 3,
+          "deletions": 2,
+          "accepted_lines": 3
+        },
+        "pyproject.toml": {
+          "additions": 46,
+          "deletions": 2,
+          "accepted_lines": 44
+        },
+        "src/main.py": {
+          "additions": 83,
+          "deletions": 18,
+          "accepted_lines": 80
+        },
+        "scripts/sync_clash_profile.py": {
+          "additions": 5,
+          "deletions": 1,
+          "accepted_lines": 4
+        },
+        "src/addons/models/tasks/cleanup_orphan_metas.py": {
+          "additions": 2,
+          "deletions": 2,
+          "accepted_lines": 2
+        },
+        "tests/unit/test_shutdown.py": {
+          "additions": 22,
+          "deletions": 4,
+          "accepted_lines": 22
+        },
+        "src/addons/models/tasks/check_orphan_files.py": {
+          "additions": 2,
+          "deletions": 2,
+          "accepted_lines": 2
+        },
+        "tests/unit/addons/test_models_lock.py": {
+          "additions": 6,
+          "deletions": 2,
+          "accepted_lines": 6
+        },
+        "src/shutdown.py": {
+          "additions": 7,
+          "deletions": 3,
+          "accepted_lines": 7
+        }
+      }
+    }
+  }
+}
