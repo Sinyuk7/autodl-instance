@@ -59,7 +59,7 @@ class LocalStrategy(SyncStrategy):
         logger.info(f"  -> 提示: 配置 userdata_repo 可启用云端备份")
         return PluginResult.warning(
             "用户数据仅保存在本地，未推送到远程仓库",
-            "如需跨实例恢复，请配置 src/addons/userdata/manifest.yaml 中的 userdata_repo",
+            "如需跨实例恢复，请运行 autodl config set userdata-repo <git-url> 后重新执行 autodl setup",
         )
 
 
@@ -144,13 +144,14 @@ class GitRepoStrategy(SyncStrategy):
         
         # 存在但非 Git 仓库 → 备份后 clone
         if data_dir.exists():
-            backup = data_dir.parent / f"{self.dir_name}.backup_{datetime.now():%Y%m%d_%H%M%S}"
+            backup = data_dir.parent / f"{data_dir.name}.backup_{datetime.now():%Y%m%d_%H%M%S}"
             logger.info(f"  -> 备份现有数据到 {backup.name}")
             shutil.move(str(data_dir), str(backup))
         
         # Clone
         logger.info(f"  -> 克隆私有仓库...")
-        ok, msg = self._run_git(["clone", self.repo_url, self.dir_name], data_dir.parent)
+        data_dir.parent.mkdir(parents=True, exist_ok=True)
+        ok, msg = self._run_git(["clone", self.repo_url, data_dir.name], data_dir.parent)
         if not ok:
             logger.error(f"  -> Git clone 失败: {msg}")
             return False

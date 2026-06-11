@@ -29,42 +29,30 @@
 
 ## 📄 配置文件规范
 
-### 架构概述：去中心化 Manifest
+### 运行时配置
 
-本项目采用 **去中心化配置** 架构——每个插件 (addon) 和库 (lib) 模块在自己的目录下维护
-`manifest.yaml`（公开技术参数）和可选的 `secrets.yaml`（敏感凭证）。
+用户运行时只通过 `autodl` CLI 管理配置：
 
-启动时 `main.py` 的 `load_manifests()` 函数会扫描 `src/addons/*/manifest.yaml` 和
-`src/lib/*/manifest.yaml`，将所有 manifest 预加载到 `AppContext.addon_manifests` 字典中。
-插件通过 `self.get_manifest(ctx)` 获取自己的配置，无需直接读文件。
+- 非敏感配置写入 `~/.config/autodl-instance/config.yaml`
+- 敏感配置写入 `~/.config/autodl-instance/secrets.yaml`
+- 数据仓库不保存 secrets
+- 环境变量优先级高于本机配置
 
-### 现有配置文件一览
+常用命令：
 
-| 文件 | 用途 | 备注 |
-|------|------|------|
-| `src/addons/torch_engine/manifest.yaml` | PyTorch 版本、CUDA 包、下载源 | |
-| `src/addons/system/manifest.yaml` | 系统工具列表、PyPI/HF 镜像 | |
-| `src/addons/git_config/manifest.yaml` | Git 用户名、邮箱、SSH 私钥 | **已 gitignore**，提供 `.example` |
-| `src/addons/nodes/manifest.yaml` | ComfyUI 自定义节点列表 | |
-| `src/addons/userdata/manifest.yaml` | 需要软链接持久化的目录列表 | |
-| `src/addons/models/manifest.yaml` | 模型预设（一键部署工作流所需模型） | Schema: `src/addons/models/schema.py` → `PresetsFile` |
-| `src/addons/models/extra_model_paths.yaml` | ComfyUI 模型路径映射模板 | 由程序渲染后写入 ComfyUI |
-| `src/lib/download/manifest.yaml` | aria2 / hf_hub 下载参数 | |
-| `src/lib/download/secrets.yaml` | HF Token、CivitAI Token 等 | **已 gitignore**，提供 `.example` |
+```bash
+autodl config set userdata-repo git@github.com:user/my-comfyui-backup.git
+autodl config set git-user-name "Your Name"
+autodl secrets set hf-token
+```
 
-### 新增配置文件的规范
+### Package 默认配置
 
-**每个模块自治管理配置，遵循以下约定：**
+插件和 lib 模块仍可维护 package 内置 `manifest.yaml`，用于公开技术默认值，例如 PyTorch 版本、节点列表、模型预设、aria2 参数和 proxy 端口。
 
-1. **公开技术参数** → 放在模块目录下的 `manifest.yaml`
-   - 启动时由 `load_manifests()` 统一扫描加载
-   - 插件通过 `self.get_manifest(ctx)` 读取
+约定：
 
-2. **敏感凭证** → 放在模块目录下的 `secrets.yaml`
-   - 必须在 `.gitignore` 中排除
-   - 提供 `secrets.yaml.example` 作为开发者模板
-   - 由需要该凭证的代码自行加载（如 `src/lib/network.py`）
-
-3. **Schema 验证**（推荐但非强制）：
-   - 结构复杂的 manifest 建议在同目录的 `schema.py` 中定义 Pydantic Model
-   - 结构极简（如仅一个字符串列表）、机器生成的 lockfile、或第三方工具模板文件可不加 Schema
+1. package manifest 只放公开默认值，不作为用户运行期配置入口。
+2. 用户覆盖项优先走 `autodl config` 或环境变量。
+3. 敏感凭证优先走 `autodl secrets` 或环境变量。
+4. 结构复杂的 manifest 建议在同目录的 `schema.py` 中定义 Pydantic Model。

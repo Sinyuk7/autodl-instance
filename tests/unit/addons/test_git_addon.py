@@ -122,6 +122,44 @@ class TestSetup:
         ssh_dir = app_context.base_dir / ".ssh"
         assert (ssh_dir / "id_ed25519").read_text() == private_key_content
 
+    def test_identity_priority_env_then_local_config_then_manifest(
+        self, app_context: AppContext, mock_runner, monkeypatch
+    ):
+        app_context.addon_manifests["git_config"] = {
+            "user_name": "Manifest User",
+            "user_email": "manifest@example.com",
+        }
+        app_context.local_config["git_user_name"] = "Config User"
+        app_context.local_config["git_user_email"] = "config@example.com"
+        monkeypatch.setenv("GIT_USER_NAME", "Env User")
+        monkeypatch.setenv("GIT_USER_EMAIL", "env@example.com")
+
+        addon = GitAddon()
+        with patch.object(addon, "_ensure_ssh_key"), patch.object(addon, "_test_github_connection"):
+            addon.setup(app_context)
+
+        assert any("git config --global user.name Env User" == cmd for cmd in mock_runner.all_commands)
+        assert any("git config --global user.email env@example.com" == cmd for cmd in mock_runner.all_commands)
+
+    def test_identity_uses_local_config_before_manifest(
+        self, app_context: AppContext, mock_runner, monkeypatch
+    ):
+        monkeypatch.delenv("GIT_USER_NAME", raising=False)
+        monkeypatch.delenv("GIT_USER_EMAIL", raising=False)
+        app_context.addon_manifests["git_config"] = {
+            "user_name": "Manifest User",
+            "user_email": "manifest@example.com",
+        }
+        app_context.local_config["git_user_name"] = "Config User"
+        app_context.local_config["git_user_email"] = "config@example.com"
+
+        addon = GitAddon()
+        with patch.object(addon, "_ensure_ssh_key"), patch.object(addon, "_test_github_connection"):
+            addon.setup(app_context)
+
+        assert any("git config --global user.name Config User" == cmd for cmd in mock_runner.all_commands)
+        assert any("git config --global user.email config@example.com" == cmd for cmd in mock_runner.all_commands)
+
 
 class TestStart:
     """start 钩子测试"""

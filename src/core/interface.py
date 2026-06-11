@@ -3,7 +3,7 @@
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pluggy
 
@@ -47,6 +47,25 @@ class AppContext:
     # === 预加载的 Manifest（避免插件直接读文件）===
     addon_manifests: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {})
 
+    # === RFC-007 路径语义 ===
+    code_root: Optional[Path] = None
+    workspace_dir: Optional[Path] = None
+    userdata_dir: Optional[Path] = None
+    models_dir: Optional[Path] = None
+    config_file: Optional[Path] = None
+    local_config: Dict[str, Any] = field(default_factory=lambda: {})
+
+    def __post_init__(self) -> None:
+        """Fill RFC-007 path fields for legacy test/context constructors."""
+        if self.code_root is None:
+            self.code_root = self.project_root
+        if self.workspace_dir is None:
+            self.workspace_dir = self.base_dir / "autodl-workspace"
+        if self.userdata_dir is None:
+            self.userdata_dir = self.base_dir / "my-comfyui-backup"
+        if self.models_dir is None:
+            self.models_dir = self.base_dir / "models"
+
 
 # 兼容别名
 Context = AppContext
@@ -80,7 +99,7 @@ class BaseAddon:
     
     def get_addon_dir(self, context: AppContext) -> Path:
         """获取当前插件的目录路径"""
-        return context.project_root / "src" / "addons" / self.name
+        return (context.code_root or context.project_root) / "src" / "addons" / self.name
 
     def get_tasks(self, phase: str) -> List["BaseTask"]:
         """

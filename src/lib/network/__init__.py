@@ -12,14 +12,14 @@ Network Environment Manager - 网络环境统一管理
 - proxy/          代理子系统（mihomo 内核管理、订阅更新）
 
 代理策略:
-  有 proxy/secrets.yaml 且配置了 subscription_url → mihomo 代理
+  有 `autodl secrets set mihomo-subscription-url` 或 userdata/mihomo/config.yaml → mihomo 代理
   没有 → fallback 到 AutoDL 学术加速（/etc/network_turbo）
 
 配置来源:
 - src/lib/network/proxy/manifest.yaml   (代理技术参数)
-- src/lib/network/proxy/secrets.yaml    (代理订阅地址，不提交 git)
+- ~/.config/autodl-instance/secrets.yaml (代理订阅地址，不提交 git)
 - src/addons/system/manifest.yaml       (镜像配置)
-- src/lib/download/secrets.yaml         (API Token)
+- ~/.config/autodl-instance/secrets.yaml (API Token)
 """
 from src.lib.network.manager import setup_network, export_env_shell, stop_proxy, sync_proxy_config
 from src.lib.network.state import invalidate_cache as invalidate_network_cache

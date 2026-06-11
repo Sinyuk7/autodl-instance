@@ -11,11 +11,13 @@ from pathlib import Path
 
 import yaml
 
+from src.core.runtime import resolve_runtime_config
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_RUNTIME = resolve_runtime_config(PROJECT_ROOT)
 DEFAULT_PROFILES_DIR = Path.home() / ".config" / "clash" / "profiles"
-DEFAULT_REPO_DIR = PROJECT_ROOT / "my-comfyui-backup"
-USERDATA_MANIFEST = PROJECT_ROOT / "src" / "addons" / "userdata" / "manifest.yaml"
+DEFAULT_REPO_DIR = _RUNTIME.userdata_dir
 TARGET_CONFIG_RELATIVE = Path("mihomo") / "config.yaml"
 
 
@@ -215,7 +217,8 @@ def ensure_backup_repo(repo_dir: Path, repo_url: str) -> None:
 
     if not repo_url:
         raise RuntimeError(
-            f"{repo_dir} is not a git repo, and userdata_repo is not configured in {USERDATA_MANIFEST}"
+            f"{repo_dir} is not a git repo, and userdata_repo is not configured. "
+            "Run: autodl config set userdata-repo <git-url>"
         )
 
     if repo_dir.exists() and any(repo_dir.iterdir()):
@@ -313,8 +316,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--manifest",
         type=Path,
-        default=USERDATA_MANIFEST,
-        help=f"userdata manifest path (default: {USERDATA_MANIFEST})",
+        default=None,
+        help="Optional legacy userdata manifest path",
     )
     parser.add_argument(
         "--message",
@@ -335,10 +338,12 @@ def main() -> int:
     args = parse_args()
     profiles_dir = args.profiles_dir.expanduser().resolve()
     repo_dir = args.repo_dir.expanduser().resolve()
-    manifest_path = args.manifest.expanduser().resolve()
 
     profile = get_active_profile(profiles_dir)
-    repo_url = get_userdata_repo_url(manifest_path) if manifest_path.exists() else ""
+    repo_url = str(_RUNTIME.local_config.get("userdata_repo", "")).strip()
+    if not repo_url and args.manifest:
+        manifest_path = args.manifest.expanduser().resolve()
+        repo_url = get_userdata_repo_url(manifest_path) if manifest_path.exists() else ""
 
     print(f"Active Clash profile: {profile.name} ({profile.file_name})")
     ensure_backup_repo(repo_dir, repo_url)

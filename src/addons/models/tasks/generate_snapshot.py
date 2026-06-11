@@ -26,11 +26,11 @@ class GenerateSnapshotTask(BaseTask):
     
     def _get_target_models_dir(self, ctx: AppContext) -> Path:
         """获取数据盘上的模型目录路径"""
-        return ctx.artifacts.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
+        return ctx.artifacts.models_dir or ctx.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
     
     def _get_lock_file_path(self, ctx: AppContext) -> Path:
         """获取 lock 文件路径"""
-        return get_lock_file(ctx.project_root)
+        return get_lock_file(ctx.userdata_dir)
 
     def _load_previous_lock(self, ctx: AppContext) -> dict:
         """加载新路径 lock；缺失时兼容读取旧数据盘根目录 lock。"""

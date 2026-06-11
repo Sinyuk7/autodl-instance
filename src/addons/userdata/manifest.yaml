@@ -11,11 +11,5 @@ sync_dirs:
   - user              # 用户配置、工作流、快捷键、模板
   - script_examples   # 脚本示例
 
-# ===========================================
-# 同步配置 (可选 - 数据备份/漫游)
-# ===========================================
-# 私有数据仓库地址 (可选)
-# 用于备份工作流、模型记录、节点配置等用户数据
-# 若不配置，数据仅保存在本地 my-comfyui-backup 目录
-# 支持 SSH 格式: git@github.com:username/my-comfyui-backup.git
-userdata_repo: "git@github.com:Sinyuk7/my-comfyui-backup.git"
+# 私有数据仓库地址由本机 config 管理:
+#   autodl config set userdata-repo git@github.com:username/my-comfyui-backup.git

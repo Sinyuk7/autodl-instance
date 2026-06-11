@@ -117,7 +117,7 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
         else:
             logger.error(
                 f"  -> ✗ 未配置 subscription_url，且本地配置不存在: {config_file}\n"
-                f"     请手动上传 Clash 配置到 {config_file}，或在 secrets.yaml 中填写订阅地址"
+                f"     请手动上传 Clash 配置到 {config_file}，或运行 autodl secrets set mihomo-subscription-url"
             )
             return False
 

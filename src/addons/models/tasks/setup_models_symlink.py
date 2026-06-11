@@ -20,7 +20,7 @@ class SetupModelsSymlinkTask(BaseTask):
     MODELS_DIR_NAME: str = "models"
 
     def _get_target_models_dir(self, ctx: AppContext) -> Path:
-        return ctx.base_dir / self.MODELS_DIR_NAME
+        return ctx.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
 
     def _get_comfy_models_dir(self, ctx: AppContext) -> Path:
         comfy_dir = ctx.artifacts.comfy_dir

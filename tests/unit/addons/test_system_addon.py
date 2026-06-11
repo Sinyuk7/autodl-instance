@@ -30,9 +30,14 @@ class TestSetup:
 
         # 验证 artifacts
         assert app_context.artifacts.uv_bin == uv_path / "uv"
-        expected_bin_dir = app_context.base_dir / "autodl-instance" / "bin"
+        expected_bin_dir = app_context.workspace_dir / "bin"
         assert app_context.artifacts.bin_dir == expected_bin_dir
         assert expected_bin_dir.exists()
+        start_script = (expected_bin_dir / "start").read_text()
+        assert "autodl start" in start_script
+        assert "python -m src.cli" not in start_script
+        assert "python -m src.main" not in start_script
+        assert f"cd {app_context.code_root or app_context.project_root}" not in start_script
 
     def test_installs_uv_when_not_exists(
         self, app_context: AppContext, mock_runner, tmp_path: Path, monkeypatch

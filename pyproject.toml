@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autodl-instance"
+version = "0.1.0"
+description = "AutoDL cloud GPU instance configuration tool for ComfyUI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+  "pluggy>=1.3.0",
+  "PyYAML>=6.0.1",
+  "rich>=13.0.0",
+  "prompt_toolkit>=3.0.0",
+  "requests>=2.28.0",
+  "pydantic>=2.0.0",
+]
+
+[project.scripts]
+autodl = "src.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"my-comfyui-backup.example" = "my-comfyui-backup.example"
+
+[tool.hatch.build]
+exclude = [
+  "src/**/secrets.yaml",
+  "src/**/__pycache__",
+  "src/**/*.pyc",
+]
+artifacts = [
+  "src/addons/*/manifest.yaml",
+  "src/addons/*/manifest.yaml.example",
+  "src/lib/*/manifest.yaml",
+  "src/lib/download/manifest.yaml",
+  "src/lib/download/secrets.yaml.example",
+  "src/lib/network/proxy/manifest.yaml",
+  "src/lib/network/proxy/secrets.yaml.example",
+]

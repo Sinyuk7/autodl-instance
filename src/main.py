@@ -5,6 +5,7 @@ import argparse
 import logging
 import os
 import sys
+from importlib import resources
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +15,14 @@ from src.core.interface import AppContext, BaseAddon
 from src.core.adapters import SubprocessRunner, FileStateManager
 from src.core.artifacts import Artifacts
 from src.core.results import PipelineResult, PluginResult
+from src.core.runtime import (
+    DEFAULT_BASE_DIR,
+    DEFAULT_COMFY_DIR,
+    resolve_runtime_config,
+    find_legacy_userdata_dirs,
+    read_expected_tool_version,
+    get_tool_version,
+)
 from src.core.utils import setup_logger, logger, kill_process_by_name
 from src.lib.network import setup_network, sync_proxy_config, invalidate_network_cache
 
@@ -30,8 +39,8 @@ from src.addons.models.plugin import ModelAddon
 # ============================================================
 # 全局常量
 # ============================================================
-BASE_DIR = Path("/root/autodl-tmp")
-COMFY_DIR = Path("/root/ComfyUI")  # ComfyUI 安装目录（系统盘）
+BASE_DIR = DEFAULT_BASE_DIR
+COMFY_DIR = DEFAULT_COMFY_DIR  # ComfyUI 安装目录（系统盘）
 DEFAULT_PORT = 6006
 
 
@@ -62,7 +71,26 @@ def create_pipeline() -> List[BaseAddon]:
     ]
 
 
-def load_manifests(project_root: Path) -> Dict[str, Dict[str, Any]]:
+def _load_manifests_from_package() -> Dict[str, Dict[str, Any]]:
+    """Load bundled manifest.yaml files when installed as a package."""
+    manifests: Dict[str, Dict[str, Any]] = {}
+    for package_name in ("src.addons", "src.lib"):
+        try:
+            package_root = resources.files(package_name)
+        except ModuleNotFoundError:
+            continue
+
+        for module in package_root.iterdir():
+            if not module.is_dir():
+                continue
+            manifest = module / "manifest.yaml"
+            if manifest.is_file():
+                with manifest.open("r", encoding="utf-8") as f:
+                    manifests[module.name] = yaml.safe_load(f) or {}
+    return manifests
+
+
+def load_manifests(code_root: Path) -> Dict[str, Dict[str, Any]]:
     """
     预加载所有模块的 manifest.yaml，统一作为配置来源。
     
@@ -76,8 +104,8 @@ def load_manifests(project_root: Path) -> Dict[str, Dict[str, Any]]:
     manifests: Dict[str, Dict[str, Any]] = {}
     
     scan_dirs = [
-        project_root / "src" / "addons",
-        project_root / "src" / "lib",
+        code_root / "src" / "addons",
+        code_root / "src" / "lib",
     ]
     
     for parent_dir in scan_dirs:
@@ -90,9 +118,33 @@ def load_manifests(project_root: Path) -> Dict[str, Dict[str, Any]]:
             if manifest_file.exists():
                 with open(manifest_file, "r", encoding="utf-8") as f:
                     manifests[module_dir.name] = yaml.safe_load(f) or {}
-                config_logger.debug(f"  -> [Manifest] 已加载: {manifest_file.relative_to(project_root)}")
-    
-    return manifests
+                config_logger.debug(f"  -> [Manifest] 已加载: {manifest_file.relative_to(code_root)}")
+
+    return manifests or _load_manifests_from_package()
+
+
+def warn_runtime_migration(context: AppContext) -> None:
+    """Emit non-blocking RFC-007 migration/version warnings."""
+    code_root = context.code_root or context.project_root
+    userdata_dir = context.userdata_dir or context.base_dir / "my-comfyui-backup"
+
+    legacy_dirs = find_legacy_userdata_dirs(code_root, context.base_dir, userdata_dir)
+    if legacy_dirs:
+        logger.warning(
+            "  -> [WARN] 检测到旧布局数据目录: %s；新写入位置为: %s。"
+            "请确认迁移后再删除旧目录。",
+            ", ".join(str(path) for path in legacy_dirs),
+            userdata_dir,
+        )
+
+    expected_version = read_expected_tool_version(userdata_dir)
+    current_version = get_tool_version()
+    if expected_version and expected_version != current_version:
+        logger.warning(
+            "  -> [WARN] data repo 期望工具版本为 %s，当前工具版本为 %s",
+            expected_version,
+            current_version,
+        )
 
 
 def create_context(debug: bool = False, load_artifacts: bool = False) -> AppContext:
@@ -103,24 +155,34 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
         debug: 调试模式
         load_artifacts: 是否从持久化文件加载 artifacts（用于 start/sync 阶段）
     """
-    project_root = Path(__file__).resolve().parent.parent
+    code_root = Path(__file__).resolve().parent.parent
+    runtime = resolve_runtime_config(code_root)
+    runtime.workspace_dir.mkdir(parents=True, exist_ok=True)
     
     # 根据场景决定是否加载已持久化的 artifacts
     if load_artifacts:
-        artifacts = Artifacts.load(project_root)
+        artifacts = Artifacts.load(runtime.workspace_dir)
     else:
         artifacts = Artifacts()
     
-    return AppContext(
-        project_root=project_root,
-        base_dir=BASE_DIR,
-        comfy_dir=COMFY_DIR,
+    context = AppContext(
+        project_root=runtime.code_root,
+        code_root=runtime.code_root,
+        base_dir=runtime.base_dir,
+        workspace_dir=runtime.workspace_dir,
+        userdata_dir=runtime.userdata_dir,
+        models_dir=runtime.models_dir,
+        comfy_dir=runtime.comfy_dir,
+        config_file=runtime.config_file,
+        local_config=runtime.local_config,
         cmd=SubprocessRunner(),
-        state=FileStateManager(BASE_DIR),
+        state=FileStateManager(runtime.workspace_dir),
         artifacts=artifacts,
         debug=debug,
-        addon_manifests=load_manifests(project_root),
+        addon_manifests=load_manifests(runtime.code_root),
     )
+    warn_runtime_migration(context)
+    return context
 
 
 def execute(
@@ -193,7 +255,9 @@ def execute(
     # setup 完成后持久化 artifacts，供后续 start/sync 使用
     if action == "setup":
         try:
-            context.artifacts.save(context.project_root)
+            artifacts_dir = context.workspace_dir or context.project_root
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            context.artifacts.save(artifacts_dir)
             logger.info("  -> Artifacts 已持久化")
         except Exception as e:
             logger.error(f"  -> Artifacts 持久化失败: {e}")
@@ -210,7 +274,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # 初始化日志（必须在所有其他操作之前）
-    log_file = BASE_DIR / "autodl-setup.log"
+    runtime = resolve_runtime_config(Path(__file__).resolve().parent.parent)
+    runtime.workspace_dir.mkdir(parents=True, exist_ok=True)
+    log_file = runtime.workspace_dir / "autodl-setup.log"
     setup_logger(log_file, debug=args.debug)
 
     # 清理残留进程

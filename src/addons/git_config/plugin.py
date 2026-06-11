@@ -16,6 +16,22 @@ class GitAddon(BaseAddon):
         """数据盘 SSH 持久化目录"""
         return ctx.base_dir / ".ssh"
 
+    def _get_config_value(
+        self,
+        ctx: AppContext,
+        *,
+        env_key: str,
+        local_key: str,
+        manifest_key: str,
+    ) -> str:
+        manifest = self.get_manifest(ctx)
+        value = (
+            os.getenv(env_key, "")
+            or ctx.local_config.get(local_key, "")
+            or manifest.get(manifest_key, "")
+        )
+        return str(value).strip()
+
     @hookimpl
     def setup(self, context: AppContext) -> None:
         logger.info("\n>>> [Git Config] 开始装配 Git 全局环境...")
@@ -35,14 +51,23 @@ class GitAddon(BaseAddon):
         ctx.artifacts.ssh_dir = self._get_ssh_persistent_dir(ctx)
 
     def _configure_git_identity(self, ctx: AppContext) -> bool:
-        """配置 Git 全局身份（优先从 manifest 读取，降级到环境变量）"""
-        manifest = self.get_manifest(ctx)
-        user_name = (manifest.get("user_name") or os.getenv("GIT_USER_NAME", "")).strip()
-        user_email = (manifest.get("user_email") or os.getenv("GIT_USER_EMAIL", "")).strip()
+        """配置 Git 全局身份（env > local config > package manifest default）"""
+        user_name = self._get_config_value(
+            ctx,
+            env_key="GIT_USER_NAME",
+            local_key="git_user_name",
+            manifest_key="user_name",
+        )
+        user_email = self._get_config_value(
+            ctx,
+            env_key="GIT_USER_EMAIL",
+            local_key="git_user_email",
+            manifest_key="user_email",
+        )
 
         if not user_name or not user_email:
             logger.info("  -> [SKIP] 未配置 Git 身份，跳过此插件")
-            logger.info("  -> 如需配置，请在 git_config/manifest.yaml 中设置 user_name 和 user_email")
+            logger.info("  -> 如需配置，请运行 autodl config set git-user-name / git-user-email")
             return False
 
         logger.info(f"  -> 已读取身份映射: {user_name} <{user_email}>")
@@ -111,8 +136,12 @@ class GitAddon(BaseAddon):
 
     def _generate_ssh_key(self, ctx: AppContext, key_path: Path) -> None:
         """生成 Ed25519 SSH 密钥对"""
-        manifest = self.get_manifest(ctx)
-        email = manifest.get("user_email") or os.getenv("GIT_USER_EMAIL", "autodl@instance")
+        email = self._get_config_value(
+            ctx,
+            env_key="GIT_USER_EMAIL",
+            local_key="git_user_email",
+            manifest_key="user_email",
+        ) or "autodl@instance"
         ctx.cmd.run(
             ["ssh-keygen", "-t", "ed25519", "-C", email, "-f", str(key_path), "-N", ""],
             check=True,

@@ -156,6 +156,8 @@ class ComfyAddon(BaseAddon):
             checks = collect_quick_checks(
                 project_root=ctx.project_root,
                 base_dir=ctx.base_dir,
+                workspace_dir=ctx.workspace_dir,
+                userdata_dir=ctx.userdata_dir,
                 comfy_dir=comfy_dir,
             )
             problems = [check for check in checks if check.is_problem]

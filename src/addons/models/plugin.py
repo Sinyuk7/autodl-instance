@@ -39,7 +39,7 @@ class ModelAddon(BaseAddon):
 
     def _get_target_models_dir(self, ctx: AppContext) -> Path:
         """获取数据盘上的模型目录路径"""
-        return ctx.base_dir / self.MODELS_DIR_NAME
+        return ctx.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
 
     def _get_comfy_models_dir(self, ctx: AppContext) -> Path:
         """获取 ComfyUI 的 models 目录路径"""
@@ -98,7 +98,7 @@ class ModelAddon(BaseAddon):
             logger.warning("  -> [WARN] 模型目录不存在，跳过")
             return PluginResult.warning(
                 f"模型目录不存在: {models_dir}",
-                "请先运行 ./init.sh，确认 ComfyUI/models 已软链接到数据盘",
+                "请先运行 autodl setup，确认 ComfyUI/models 已软链接到数据盘",
             )
 
         # 运行 Sync Tasks

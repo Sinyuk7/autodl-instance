@@ -3,15 +3,16 @@ AutoDL 关机同步脚本
 
 执行所有插件的 sync() 方法（逆序），用于在关机前同步环境快照。
 调用方式:
-  - 直接执行: python -m src.shutdown
-  - 通过 bye 命令: bye (需先执行 setup 生成 bin/ 脚本)
+  - autodl bye
+  - 兼容 shim: bye (需先执行 autodl setup 生成 bin/ 脚本)
 """
 import argparse
 from pathlib import Path
 
-from src.main import create_context, execute, BASE_DIR
+from src.main import create_context, execute
+from src.core.runtime import resolve_runtime_config
 from src.core.utils import logger, setup_logger
-from src.lib.network import setup_network, stop_proxy
+from src.lib.network import setup_network, stop_proxy, sync_proxy_config
 
 
 def main() -> None:
@@ -20,7 +21,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # 初始化日志（必须在所有 logger 调用之前）
-    log_file = BASE_DIR / "autodl-setup.log"
+    runtime = resolve_runtime_config(Path(__file__).resolve().parent.parent)
+    runtime.workspace_dir.mkdir(parents=True, exist_ok=True)
+    log_file = runtime.workspace_dir / "autodl-setup.log"
     setup_logger(log_file)
 
     # 初始化网络环境（sync 可能需要 git push 等网络操作）
@@ -35,6 +38,7 @@ def main() -> None:
     
     result = None
     try:
+        sync_proxy_config()
         # 执行 sync 动作 (execute 内部会自动逆序执行)
         result = execute("sync", context)
     finally:

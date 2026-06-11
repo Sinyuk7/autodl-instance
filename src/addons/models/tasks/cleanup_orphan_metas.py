@@ -24,7 +24,7 @@ class CleanupOrphanMetasTask(BaseTask):
     
     def _get_target_models_dir(self, ctx: AppContext) -> Path:
         """获取数据盘上的模型目录路径"""
-        return ctx.artifacts.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
+        return ctx.artifacts.models_dir or ctx.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
     
     def _cleanup(self, models_base: Path) -> int:
         """清理孤儿 .meta 文件

@@ -25,7 +25,7 @@ class CheckOrphanFilesTask(BaseTask):
     
     def _get_target_models_dir(self, ctx: AppContext) -> Path:
         """获取数据盘上的模型目录路径"""
-        return ctx.base_dir / self.MODELS_DIR_NAME
+        return ctx.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
     
     def _get_comfy_models_dir(self, ctx: AppContext) -> Optional[Path]:
         """获取 ComfyUI 的 models 目录路径"""

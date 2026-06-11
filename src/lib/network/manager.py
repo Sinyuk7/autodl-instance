@@ -4,7 +4,7 @@ NetworkManager - 网络环境核心编排器
 按顺序初始化所有网络子模块: proxy → mirror → token
 
 代理策略:
-  1. 如果配置了 mihomo（proxy/secrets.yaml 有 subscription_url，
+  1. 如果配置了 mihomo（autodl secrets 有 mihomo_subscription_url，
      或 my-comfyui-backup/mihomo/ 有手动上传的配置）→ 启动 mihomo
   2. 否则 fallback 到 AutoDL 学术加速（/etc/network_turbo）
   3. 都没有 → 无代理模式
@@ -35,16 +35,14 @@ from src.lib.network.state import (
     mark_subscription_success,
     invalidate_cache,
 )
+from src.core.runtime import load_local_secrets, resolve_runtime_config
 
 logger = logging.getLogger("autodl_setup")
 
 # 配置文件路径
 _PROXY_DIR = Path(__file__).resolve().parent / "proxy"
 _PROXY_MANIFEST = _PROXY_DIR / "manifest.yaml"
-_PROXY_SECRETS = _PROXY_DIR / "secrets.yaml"
 
-# 持久化目录（相对于 project_root）
-_BACKUP_DIR_NAME = "my-comfyui-backup"
 _BACKUP_MIHOMO_DIR = "mihomo"
 
 # 需要在 backup ↔ /etc/mihomo 之间同步的文件
@@ -65,28 +63,34 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         return {}
 
 
-def _get_project_root() -> Path:
-    """获取项目根目录（与 main.py 保持一致）"""
-    return Path(__file__).resolve().parent.parent.parent.parent
-
-
 def _get_backup_mihomo_dir() -> Path:
     """获取 mihomo 持久化备份目录"""
-    return _get_project_root() / _BACKUP_DIR_NAME / _BACKUP_MIHOMO_DIR
+    code_root = Path(__file__).resolve().parent.parent.parent.parent
+    return resolve_runtime_config(code_root).userdata_dir / _BACKUP_MIHOMO_DIR
+
+
+def _get_local_secrets() -> Dict[str, Any]:
+    code_root = Path(__file__).resolve().parent.parent.parent.parent
+    runtime = resolve_runtime_config(code_root)
+    return load_local_secrets(runtime.secrets_file)
 
 
 def _build_proxy_config() -> Optional[ProxyConfig]:
-    """从 manifest.yaml + secrets.yaml 构建 ProxyConfig
+    """从 package manifest + 本机 secrets 构建 ProxyConfig
 
     判断是否启用 mihomo 的条件（满足任一即可）:
-    1. secrets.yaml 中配置了 subscription_url（在线订阅模式）
+    1. 本机 secrets 中配置了 mihomo_subscription_url（在线订阅模式）
     2. backup 目录中存在 config.yaml（手动上传模式）
 
     Returns:
         ProxyConfig 实例，如果两个条件都不满足则返回 None
     """
-    secrets = _load_yaml(_PROXY_SECRETS)
-    subscription_url = secrets.get("subscription_url", "")
+    secrets = _get_local_secrets()
+    subscription_url = (
+        secrets.get("mihomo_subscription_url")
+        or secrets.get("subscription_url")
+        or ""
+    )
 
     # 检查 backup 目录是否有手动上传的配置
     backup_config = _get_backup_mihomo_dir() / "config.yaml"
@@ -101,7 +105,7 @@ def _build_proxy_config() -> Optional[ProxyConfig]:
         subscription_url=subscription_url,
         proxy_port=manifest.get("proxy_port", 7890),
         api_port=manifest.get("api_port", 9090),
-        api_secret=secrets.get("api_secret", ""),
+        api_secret=secrets.get("mihomo_api_secret") or secrets.get("api_secret", ""),
         version=manifest.get("mihomo_version", "v1.19.10"),
         install_dir=Path(manifest.get("install_dir", "/usr/local/bin")),
         config_dir=Path(manifest.get("config_dir", "/etc/mihomo")),

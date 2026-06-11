@@ -63,49 +63,40 @@ class SystemAddon(BaseAddon):
 
     def _generate_bin_scripts(self, ctx: AppContext) -> None:
         """任务 3: 生成 bin/ 全局命令脚本并配置 PATH"""
-        project_dir = ctx.base_dir / "autodl-instance"
-        bin_dir = project_dir / "bin"
+        workspace_dir = ctx.workspace_dir or (ctx.base_dir / "autodl-workspace")
+        bin_dir = workspace_dir / "bin"
         
         bin_dir.mkdir(parents=True, exist_ok=True)
+
+        def command_script(command: str, description: str) -> str:
+            return dedent(f"""\
+                #!/bin/bash
+                # {description} - 自动生成，请勿手动修改
+                if ! command -v autodl >/dev/null 2>&1; then
+                  echo "autodl command not found. Install it with: uv tool install autodl-instance" >&2
+                  exit 127
+                fi
+                exec autodl {command} "$@"
+            """)
+
+        turbo_script = dedent("""\
+            #!/bin/bash
+            # AutoDL 网络环境初始化 - 自动生成，请勿手动修改
+            # 用法: source turbo
+            if ! command -v autodl >/dev/null 2>&1; then
+              echo "autodl command not found. Install it with: uv tool install autodl-instance" >&2
+              return 127 2>/dev/null || exit 127
+            fi
+            eval "$(autodl turbo)"
+        """)
         
         scripts = {
-            "turbo": dedent(f"""\
-                #!/bin/bash
-                # AutoDL 网络环境初始化 - 自动生成，请勿手动修改
-                # 用法: source turbo
-                cd {project_dir}
-                eval $(python -m src.lib.network)
-            """),
-            "bye": dedent(f"""\
-                #!/bin/bash
-                # AutoDL 离线同步命令 - 自动生成，请勿手动修改
-                cd {project_dir}
-                python -m src.shutdown
-            """),
-            "model": dedent(f"""\
-                #!/bin/bash
-                # ComfyUI 模型管理命令 - 自动生成，请勿手动修改
-                cd {project_dir}
-                python -m src.addons.models.downloader "$@"
-            """),
-            "status": dedent(f"""\
-                #!/bin/bash
-                # AutoDL 工作区状态检查 - 自动生成，请勿手动修改
-                cd {project_dir}
-                python -m src.status status "$@"
-            """),
-            "doctor": dedent(f"""\
-                #!/bin/bash
-                # AutoDL 工作区深度诊断 - 自动生成，请勿手动修改
-                cd {project_dir}
-                python -m src.status doctor "$@"
-            """),
-            "start": dedent(f"""\
-                #!/bin/bash
-                # ComfyUI 启动命令 - 自动生成，请勿手动修改
-                cd {project_dir}
-                python -m src.main start "$@"
-            """),
+            "turbo": turbo_script,
+            "bye": command_script("bye", "AutoDL 离线同步命令"),
+            "model": command_script("model", "ComfyUI 模型管理命令"),
+            "status": command_script("status", "AutoDL 工作区状态检查"),
+            "doctor": command_script("doctor", "AutoDL 工作区深度诊断"),
+            "start": command_script("start", "ComfyUI 启动命令"),
         }
         
         for script_name, content in scripts.items():

@@ -8,6 +8,7 @@ from typing import  List, cast
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
 from src.core.results import PluginResult
+from src.core.runtime import write_data_repo_metadata
 from src.core.utils import logger
 
 from .strategy import GitRepoStrategy, LocalStrategy, SyncStrategy
@@ -22,12 +23,15 @@ class UserdataAddon(BaseAddon):
 
     def _get_strategy(self, ctx: AppContext) -> SyncStrategy:
         """根据配置选择同步策略"""
-        manifest = self.get_manifest(ctx)
-        repo_url = manifest.get("userdata_repo") or ""
+        repo_url = ctx.local_config.get("userdata_repo") or ""
         
         if repo_url.strip():
-            return GitRepoStrategy(repo_url.strip(), self.DATA_DIR_NAME, ctx.cmd)
-        return LocalStrategy(ctx.project_root / self.EXAMPLE_DIR_NAME)
+            return GitRepoStrategy(repo_url.strip(), (ctx.userdata_dir or Path(self.DATA_DIR_NAME)).name, ctx.cmd)
+        return LocalStrategy((ctx.code_root or ctx.project_root) / self.EXAMPLE_DIR_NAME)
+
+    def _get_data_dir(self, ctx: AppContext) -> Path:
+        """获取 RFC-007 用户数据仓库目录。"""
+        return ctx.userdata_dir or (ctx.base_dir / self.DATA_DIR_NAME)
 
     def _setup_symlink(self, comfy_path: Path, data_path: Path) -> None:
         """建立软链接: comfy_path → data_path"""
@@ -66,18 +70,27 @@ class UserdataAddon(BaseAddon):
         logger.info("\n>>> [Userdata] 初始化用户数据...")
         ctx = context
 
-        data_dir = ctx.project_root / self.DATA_DIR_NAME
+        data_dir = self._get_data_dir(ctx)
         strategy = self._get_strategy(ctx)
+        manifest = self.get_manifest(ctx)
+        sync_dirs = cast(List[str], manifest.get("sync_dirs", []))
         
         # 准备数据目录
         if not strategy.prepare(data_dir, ctx):
             logger.error("  -> 数据目录准备失败")
             return
 
+        data_repo_config = {
+            "sync_dirs": sync_dirs,
+            "models_dir": str(ctx.models_dir),
+            "workspace_dir": str(ctx.workspace_dir),
+        }
+        if ctx.local_config.get("userdata_repo"):
+            data_repo_config["userdata_repo"] = ctx.local_config["userdata_repo"]
+        write_data_repo_metadata(data_dir, config=data_repo_config)
+        ctx.artifacts.userdata_dir = data_dir
+
         # 建立软链接
-        manifest = self.get_manifest(ctx)
-        sync_dirs = cast(List[str], manifest.get("sync_dirs", []))
-        
         comfy_dir = ctx.artifacts.comfy_dir
         if not sync_dirs or not comfy_dir or not comfy_dir.exists():
             return
@@ -85,8 +98,6 @@ class UserdataAddon(BaseAddon):
         for dir_name in sync_dirs:
             self._setup_symlink(comfy_dir / dir_name, data_dir / dir_name)
         
-        # 产出
-        ctx.artifacts.userdata_dir = data_dir
         logger.info("  -> 用户数据就绪")
 
     @hookimpl
@@ -99,11 +110,11 @@ class UserdataAddon(BaseAddon):
         logger.info("\n>>> [Userdata] 同步用户数据...")
         ctx = context
         
-        data_dir = ctx.project_root / self.DATA_DIR_NAME
+        data_dir = self._get_data_dir(ctx)
         if not data_dir.exists():
             return PluginResult.failure(
                 f"用户数据目录不存在: {data_dir}",
-                "请先运行 ./init.sh，确认 userdata_repo 或本地 my-comfyui-backup 初始化成功",
+                "请先运行 autodl config set userdata-repo <git-url> 或 autodl setup",
             )
         
         strategy = self._get_strategy(ctx)
