@@ -22,46 +22,75 @@ class ComfyAddon(BaseAddon):
         return ctx.base_dir / "ComfyUI_output"
 
     def _is_installed(self, ctx: AppContext) -> bool:
-        """检查是否已安装"""
-        if ctx.state.is_completed(StateKey.COMFY_INSTALLED):
-            return True
-        
-        # 目录存在也算已安装
+        """Only trust a completed setup whose ComfyUI entrypoint still exists."""
         main_py = self._get_comfy_dir(ctx) / "main.py"
-        if main_py.exists():
-            ctx.state.mark_completed(StateKey.COMFY_INSTALLED)
+        if ctx.state.is_completed(StateKey.COMFY_INSTALLED) and main_py.exists():
             return True
-        
+
+        if ctx.state.is_completed(StateKey.COMFY_INSTALLED):
+            ctx.state.clear(StateKey.COMFY_INSTALLED)
         return False
 
     def _get_pypi_mirror(self, ctx: AppContext) -> str:
-        """从 manifest 获取 PyPI 镜像源"""
+        """Return the complete PyPI index required by current ComfyUI releases."""
         manifest = self.get_manifest(ctx)
-        return manifest.get("pypi_mirror") or ""
+        return manifest.get("pypi_index_url") or "https://pypi.org/simple"
 
     def _install_comfy_cli(self, ctx: AppContext) -> None:
         """安装 comfy-cli（依赖 SystemAddon 产出的 uv_bin）"""
-        if shutil.which("comfy"):
-            logger.info("  -> comfy-cli 已就绪，跳过安装。")
-            return
-        
         uv_bin = ctx.artifacts.uv_bin
         if not uv_bin or not uv_bin.exists():
             raise RuntimeError("uv 未安装，请确保 SystemAddon 在 ComfyAddon 之前执行")
-        
+
+        manifest = self.get_manifest(ctx)
+        comfy_cli_version = str(manifest.get("comfy_cli_version") or "1.20.0")
         pypi_mirror = self._get_pypi_mirror(ctx)
-        
-        cmd = [str(uv_bin), "pip", "install", "--system", "comfy-cli"]
+
+        cmd = [
+            str(uv_bin),
+            "pip",
+            "install",
+            "--system",
+            "--upgrade",
+            f"comfy-cli=={comfy_cli_version}",
+            "--index-url",
+            pypi_mirror,
+        ]
         if ctx.debug:
             cmd.insert(3, "--verbose")
-        if pypi_mirror:
-            cmd.extend(["-i", pypi_mirror])
-            logger.info(f"  -> 正在通过 uv 安装 comfy-cli (镜像: {pypi_mirror})...")
-        else:
-            logger.info("  -> 正在通过 uv 安装 comfy-cli...")
-        
+
+        logger.info(f"  -> 正在确认 comfy-cli {comfy_cli_version}...")
         ctx.cmd.run(cmd, check=True)
         logger.info("  -> comfy-cli 引擎就绪。")
+
+    def _build_install_command(self, ctx: AppContext, comfy_dir: Path) -> list[str]:
+        manifest = self.get_manifest(ctx)
+        torch_manifest = ctx.addon_manifests.get("torch_engine", {})
+        index_url = self._get_pypi_mirror(ctx)
+        comfyui_version = str(manifest.get("comfyui_version") or "latest")
+        cuda_version = str(torch_manifest.get("min_cuda_version") or "13.0")
+
+        cmd = [
+            "env",
+            f"PIP_INDEX_URL={index_url}",
+            f"UV_DEFAULT_INDEX={index_url}",
+            "comfy",
+            "--workspace",
+            str(comfy_dir),
+            "--skip-prompt",
+            "install",
+            "--version",
+            comfyui_version,
+            "--nvidia",
+            "--cuda-version",
+            cuda_version,
+            "--skip-torch-or-directml",
+        ]
+        if manifest.get("fast_deps", True):
+            cmd.append("--fast-deps")
+        if (comfy_dir / "main.py").exists():
+            cmd.append("--restore")
+        return cmd
 
     def _setup_output_symlink(self, ctx: AppContext, comfy_dir: Path) -> None:
         """将 output 目录软链接到 tmp 盘
@@ -123,11 +152,12 @@ class ComfyAddon(BaseAddon):
             logger.info("  -> [SKIP] ComfyUI 已安装")
             self.log(ctx, "setup", "skipped:already_installed")
         else:
-            # 执行安装
+            # Explicit flags keep setup non-interactive and reuse TorchAddon.
             logger.info(f"  -> 正在部署至 {comfy_dir}...")
             ctx.cmd.run(
-                ["comfy", "--workspace", str(comfy_dir), "install"],
+                self._build_install_command(ctx, comfy_dir),
                 check=True,
+                capture_output=False,
             )
             ctx.state.mark_completed(StateKey.COMFY_INSTALLED)
             logger.info("  -> ComfyUI 核心引擎装配完成！")
@@ -137,7 +167,8 @@ class ComfyAddon(BaseAddon):
         ctx.artifacts.comfy_dir = comfy_dir
         ctx.artifacts.custom_nodes_dir = comfy_dir / "custom_nodes"
         ctx.artifacts.user_dir = comfy_dir / "user"
-        ctx.artifacts.output_dir = None
+        workspace_data_dir = ctx.workspace_data_dir or (ctx.base_dir / "comfyui-workspace")
+        ctx.artifacts.output_dir = workspace_data_dir / "output"
 
     @hookimpl
     def start(self, context: AppContext) -> None:

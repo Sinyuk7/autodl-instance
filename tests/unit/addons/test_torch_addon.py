@@ -123,9 +123,9 @@ class TestStart:
         addon.start(app_context)
 
 
-class TestSync:
-    """Tests for the sync hook."""
+class TestStop:
+    """Tests for the stop hook."""
 
-    def test_sync_does_nothing(self, app_context: AppContext):
+    def test_stop_does_nothing(self, app_context: AppContext):
         addon = TorchAddon()
-        addon.sync(app_context)
+        addon.stop(app_context)

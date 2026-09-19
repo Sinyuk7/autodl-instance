@@ -28,11 +28,22 @@ class TestSetup:
         comfy_dir = app_context.comfy_dir
         assert app_context.artifacts.comfy_dir == comfy_dir
         assert app_context.artifacts.custom_nodes_dir == comfy_dir / "custom_nodes"
-        # 验证 output_dir 在 base_dir（tmp 盘）
-        assert app_context.artifacts.output_dir == app_context.base_dir / "ComfyUI_output"
+        assert app_context.artifacts.output_dir == app_context.workspace_data_dir / "output"
+        cli_install = mock_runner.assert_called_with("comfy-cli==1.20.0")
+        assert "--index-url https://pypi.org/simple" in cli_install.cmd
+        install = mock_runner.assert_called_with("comfy --workspace")
+        assert "--skip-prompt install" in install.cmd
+        assert "--version latest" in install.cmd
+        assert "--nvidia --cuda-version 13.0" in install.cmd
+        assert "--skip-torch-or-directml" in install.cmd
+        assert install.kwargs["capture_output"] is False
 
     def test_skip_when_already_installed(self, app_context: AppContext, mock_runner):
         """已安装时跳过：状态已标记时不重复安装"""
+        uv_bin = app_context.base_dir / "uv"
+        uv_bin.touch()
+        app_context.artifacts.uv_bin = uv_bin
+        (app_context.comfy_dir / "main.py").touch()
         app_context.state.mark_completed(StateKey.COMFY_INSTALLED)
 
         with patch("shutil.which", return_value="/usr/bin/comfy"):
@@ -52,6 +63,19 @@ class TestSetup:
             addon = ComfyAddon()
             with pytest.raises(RuntimeError, match="uv 未安装"):
                 addon.setup(app_context)
+
+    def test_partial_install_restores_dependencies(self, app_context: AppContext, mock_runner, tmp_path: Path):
+        uv_bin = tmp_path / "uv"
+        uv_bin.touch()
+        app_context.artifacts.uv_bin = uv_bin
+        app_context.comfy_dir.mkdir(parents=True, exist_ok=True)
+        (app_context.comfy_dir / "main.py").touch()
+
+        ComfyAddon().setup(app_context)
+
+        install = mock_runner.assert_called_with("comfy --workspace")
+        assert "--restore" in install.cmd
+        assert app_context.state.is_completed(StateKey.COMFY_INSTALLED)
 
 
 class TestStart:
@@ -84,10 +108,12 @@ class TestStart:
             addon.start(app_context)  # 不应抛出异常
 
 
-class TestSync:
-    """sync 钩子测试"""
+class TestStop:
+    """stop 钩子测试"""
 
-    def test_sync_does_nothing(self, app_context: AppContext):
-        """sync 为空实现"""
+    def test_stop_releases_port(self, app_context: AppContext):
         addon = ComfyAddon()
-        addon.sync(app_context)  # 不应抛出异常
+        with patch("src.addons.comfy_core.plugin.release_port") as mock_release:
+            addon.stop(app_context)
+
+        mock_release.assert_called_once_with(6006)
