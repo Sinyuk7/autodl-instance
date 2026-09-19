@@ -4,9 +4,10 @@ ComfyUI 核心安装插件
 import shutil
 from pathlib import Path
 
-from src.core.interface import BaseAddon, AppContext, hookimpl
+from src.core.interface import AppContext, BaseAddon, hookimpl
+from src.core.results import PluginResult
 from src.core.schema import StateKey
-from src.core.utils import logger, release_port
+from src.core.utils import ensure_port_available, logger, stop_owned_comfy_listener
 
 
 class ComfyAddon(BaseAddon):
@@ -199,7 +200,7 @@ class ComfyAddon(BaseAddon):
         except Exception as e:
             logger.warning(f"  -> [WARN] 启动前状态检查失败，继续启动: {e}")
         
-        release_port(port)
+        ensure_port_available(port)
         
         logger.info(f"  -> ComfyUI 目录: {comfy_dir}")
         logger.info(f"  -> 监听端口: {port}")
@@ -213,5 +214,11 @@ class ComfyAddon(BaseAddon):
             logger.info("\n  -> 服务已安全关闭。")
 
     @hookimpl
-    def stop(self, context: AppContext) -> None:
-        release_port(self.DEFAULT_PORT)
+    def stop(self, context: AppContext) -> PluginResult:
+        comfy_dir = context.artifacts.comfy_dir or self._get_comfy_dir(context)
+        stopped = stop_owned_comfy_listener(self.DEFAULT_PORT, comfy_dir)
+        if not stopped:
+            return PluginResult.skipped("ComfyUI 未监听 6006")
+        return PluginResult.success(
+            f"已向确认归属的 ComfyUI PID 发送 SIGTERM: {stopped}"
+        )

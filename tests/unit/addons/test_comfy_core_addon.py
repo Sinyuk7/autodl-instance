@@ -1,6 +1,6 @@
 """ComfyAddon 单元测试"""
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -85,25 +85,22 @@ class TestStart:
         """正常启动：释放端口并启动服务"""
         app_context.artifacts.comfy_dir = app_context.base_dir / "ComfyUI"
 
-        with patch("src.addons.comfy_core.plugin.release_port") as mock_release:
+        with patch("src.addons.comfy_core.plugin.ensure_port_available") as mock_check:
             addon = ComfyAddon()
             addon.start(app_context)
 
-        mock_release.assert_called_with(6006)
+        mock_check.assert_called_with(6006)
         # 验证调用了启动命令
         assert any("launch" in cmd for cmd in mock_runner.all_commands)
 
     def test_handles_keyboard_interrupt(self, app_context: AppContext, mock_runner):
         """中断处理：KeyboardInterrupt 不应抛出异常"""
-        from unittest.mock import MagicMock
-        from src.core.ports import CommandResult
-
         def side_effect(*args, **kwargs):
             raise KeyboardInterrupt()
 
         mock_runner.run = MagicMock(side_effect=side_effect)
 
-        with patch("src.addons.comfy_core.plugin.release_port"):
+        with patch("src.addons.comfy_core.plugin.ensure_port_available"):
             addon = ComfyAddon()
             addon.start(app_context)  # 不应抛出异常
 
@@ -111,9 +108,13 @@ class TestStart:
 class TestStop:
     """stop 钩子测试"""
 
-    def test_stop_releases_port(self, app_context: AppContext):
+    def test_stop_only_stops_owned_listener(self, app_context: AppContext):
         addon = ComfyAddon()
-        with patch("src.addons.comfy_core.plugin.release_port") as mock_release:
-            addon.stop(app_context)
+        with patch(
+            "src.addons.comfy_core.plugin.stop_owned_comfy_listener",
+            return_value=[123],
+        ) as mock_stop:
+            result = addon.stop(app_context)
 
-        mock_release.assert_called_once_with(6006)
+        mock_stop.assert_called_once_with(6006, app_context.comfy_dir)
+        assert result.status == "success"

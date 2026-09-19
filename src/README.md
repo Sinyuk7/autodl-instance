@@ -51,25 +51,18 @@
 ```python
 # main.py 核心逻辑
 def main():
-    # 1. 清理残留进程
-    kill_process_by_name("python.*src.main", exclude_pid=os.getpid())
-    
-    # 2. setup 时清除网络缓存，确保走完整初始化
+    # 1. setup 时清除网络缓存，确保走完整初始化
     if action == "setup":
         invalidate_network_cache()
     
-    # 3. 初始化网络环境（代理 + 镜像 + Token）
+    # 2. 初始化网络环境（代理 + 镜像 + Token）
     setup_network()
     
-    # 4. 创建上下文（start/sync 需加载已持久化的 artifacts）
-    load_artifacts = action in ("start", "sync")
+    # 3. 创建上下文（start/stop 需加载已持久化的 artifacts）
+    load_artifacts = action in ("start", "stop")
     context = create_context(debug, load_artifacts)
     
-    # 5. sync 阶段特殊处理：先同步代理配置
-    if action == "sync":
-        sync_proxy_config()
-    
-    # 6. 执行 Pipeline
+    # 4. 执行 Pipeline
     execute(action, context)
 ```
 

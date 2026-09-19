@@ -6,14 +6,15 @@ main.py 单元测试（精简版）
 - create_context(): 应用上下文创建
 - main(): CLI 入口
 """
-import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.main import load_manifests, create_context, main, BASE_DIR, execute
-from src.core.interface import AppContext
+import pytest
+
 from src.core.adapters import SubprocessRunner
 from src.core.artifacts import ARTIFACTS_FILENAME
+from src.core.interface import AppContext
+from src.main import BASE_DIR, create_context, execute, load_manifests, main
 
 
 class TestLoadManifests:
@@ -184,7 +185,6 @@ class TestMain:
         })()
         with patch("src.main.resolve_runtime_config", return_value=runtime), \
              patch("src.main.setup_logger"), \
-             patch("src.main.kill_process_by_name"), \
              patch("src.main.setup_network"), \
              patch("src.main.create_context") as mock_ctx, \
              patch("src.main.execute") as mock_exec:
@@ -227,7 +227,7 @@ class TestMain:
         assert mock_dependencies["execute"].call_args[1]["only"] == "system"
 
     def test_execution_order(self, monkeypatch):
-        """初始化顺序: logger → kill → network → context → execute"""
+        """初始化顺序: logger → network → context → execute"""
         call_order = []
         runtime = type("Runtime", (), {
             "code_root": Path("/tmp/code"),
@@ -242,7 +242,6 @@ class TestMain:
         
         with patch("src.main.resolve_runtime_config", return_value=runtime), \
              patch("src.main.setup_logger", side_effect=lambda *a, **kw: call_order.append("logger")), \
-             patch("src.main.kill_process_by_name", side_effect=lambda *a, **kw: call_order.append("kill")), \
              patch("src.main.setup_network", side_effect=lambda: call_order.append("network")), \
              patch("src.main.create_context", side_effect=lambda **kw: call_order.append("context")), \
              patch("src.main.execute", side_effect=lambda *a, **kw: call_order.append("execute")):
@@ -250,4 +249,4 @@ class TestMain:
             monkeypatch.setattr("sys.argv", ["main.py", "setup"])
             main()
         
-        assert call_order == ["logger", "kill", "network", "context", "execute"]
+        assert call_order == ["logger", "network", "context", "execute"]

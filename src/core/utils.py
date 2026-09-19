@@ -7,7 +7,6 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def setup_logger(log_file: Path, debug: bool = False) -> logging.Logger:
@@ -48,61 +47,64 @@ def setup_logger(log_file: Path, debug: bool = False) -> logging.Logger:
 logger = logging.getLogger("autodl_setup")
 
 
-def kill_process_by_name(pattern: str, exclude_pid: Optional[int] = None) -> None:
-    """
-    根据进程名模式清理进程，用于处理 Ctrl+Z 或异常退出残留的进程
-    
-    注意: 使用 grep -v grep 的技巧来排除 pgrep 自身被匹配的问题
-    """
-    try:
-        # 使用 ps + grep 替代 pgrep，避免 pgrep -f 匹配自身命令行的问题
-        # grep -v grep 排除 grep 进程本身
-        result = subprocess.run(
-            f"ps aux | grep -E '{pattern}' | grep -v grep | awk '{{print $2}}'",
-            shell=True, capture_output=True, text=True, check=False
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            pids = [int(p) for p in result.stdout.strip().split('\n') if p]
-            if exclude_pid:
-                pids = [p for p in pids if p != exclude_pid]
-            
-            if pids:
-                logger.info(f">>> [Cleanup] 检测到 {len(pids)} 个匹配 '{pattern}' 的残留进程，正在清理...")
-                for pid in pids:
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                logger.info(">>> [Cleanup] 清理完成")
-    except FileNotFoundError:
-        # Windows 没有 pgrep，跳过
-        pass
-
-
-def release_port(port: int) -> None:
-    """释放指定端口，确保服务能正常启动"""
+def listening_pids(port: int) -> list[int]:
+    """Return listener PIDs without changing process state."""
     try:
         result = subprocess.run(
-            ["fuser", "-k", "-9", f"{port}/tcp"],
+            ["lsof", "-nP", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
             capture_output=True, text=True, check=False,
             timeout=5
         )
-        if result.returncode == 0:
-            logger.info(f"  -> 已释放端口 {port} 上的残留进程")
-            return
-    except Exception:
-        pass
-    
-    try:
-        result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
-            capture_output=True, text=True, check=False,
-            timeout=5
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"无法安全检查端口 {port}: {exc}") from exc
+
+    if result.returncode not in (0, 1):
+        raise RuntimeError(
+            f"无法安全检查端口 {port}: lsof exit code {result.returncode}"
         )
-        if result.returncode == 0 and result.stdout.strip():
-            pids = result.stdout.strip().split('\n')
-            for pid in pids:
-                subprocess.run(["kill", "-9", pid], capture_output=True, check=False)
-            logger.info(f"  -> 已释放端口 {port} 上的残留进程")
-    except Exception:
-        pass
+    return sorted({int(pid) for pid in result.stdout.split() if pid.isdigit()})
+
+
+def ensure_port_available(port: int) -> None:
+    """Refuse to start when a port is occupied; never kill its listener."""
+    pids = listening_pids(port)
+    if pids:
+        raise RuntimeError(
+            f"端口 {port} 已被 PID {', '.join(map(str, pids))} 占用；"
+            "请先确认进程归属，不会自动终止"
+        )
+
+
+def _is_owned_comfy_process(pid: int, comfy_dir: Path) -> bool:
+    """Require both the expected cwd and a Python main.py command line."""
+    proc_dir = Path("/proc") / str(pid)
+    try:
+        cwd = (proc_dir / "cwd").resolve(strict=True)
+        args = (proc_dir / "cmdline").read_bytes().split(b"\0")
+    except (FileNotFoundError, PermissionError, OSError):
+        return False
+
+    decoded = [arg.decode(errors="replace") for arg in args if arg]
+    if not decoded or cwd != comfy_dir.resolve():
+        return False
+    executable = Path(decoded[0]).name.lower()
+    has_main = any(Path(arg).name == "main.py" for arg in decoded[1:])
+    return "python" in executable and has_main
+
+
+def stop_owned_comfy_listener(port: int, comfy_dir: Path) -> list[int]:
+    """SIGTERM listeners only after proving that all belong to this ComfyUI."""
+    pids = listening_pids(port)
+    foreign = [pid for pid in pids if not _is_owned_comfy_process(pid, comfy_dir)]
+    if foreign:
+        raise RuntimeError(
+            f"拒绝停止端口 {port}：PID {', '.join(map(str, foreign))} "
+            "无法确认属于目标 ComfyUI"
+        )
+
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+    return pids

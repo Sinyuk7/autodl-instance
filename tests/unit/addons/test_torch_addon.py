@@ -74,7 +74,7 @@ class TestSetup:
         assert "torchaudio==2.11.0+cu130" in install.cmd
         assert app_context.artifacts.torch_installed is True
 
-    def test_exits_when_driver_insufficient(self, app_context: AppContext, mock_runner):
+    def test_raises_when_driver_insufficient(self, app_context: AppContext, mock_runner):
         mock_runner.stub_results[f"{sys.executable} -c"] = CommandResult(
             returncode=1,
             stdout="",
@@ -90,11 +90,11 @@ class TestSetup:
 
         addon = TorchAddon()
 
-        with patch("src.addons.torch_engine.plugin.resolve_target_python", return_value=sys.executable):
-            with pytest.raises(SystemExit) as excinfo:
-                addon.setup(app_context)
-
-        assert excinfo.value.code == 1
+        with patch(
+            "src.addons.torch_engine.plugin.resolve_target_python",
+            return_value=sys.executable,
+        ), pytest.raises(RuntimeError, match="below required 580"):
+            addon.setup(app_context)
 
     def test_reads_manifest_config(self, app_context: AppContext, mock_runner):
         app_context.addon_manifests["torch_engine"] = {

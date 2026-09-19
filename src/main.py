@@ -3,7 +3,6 @@ AutoDL 自动化装配入口
 """
 import argparse
 import logging
-import os
 import sys
 from importlib import resources
 from pathlib import Path
@@ -11,26 +10,23 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from src.core.interface import AppContext, BaseAddon
-from src.core.adapters import SubprocessRunner, FileStateManager
+from src.addons.comfy_core.plugin import ComfyAddon
+from src.addons.models.plugin import ModelAddon
+from src.addons.nodes.plugin import NodesAddon
+from src.addons.system.plugin import SystemAddon
+from src.addons.torch_engine.plugin import TorchAddon
+from src.addons.workspace.plugin import WorkspaceAddon
+from src.core.adapters import FileStateManager, SubprocessRunner
 from src.core.artifacts import Artifacts
+from src.core.interface import AppContext, BaseAddon
 from src.core.results import PipelineResult, PluginResult
 from src.core.runtime import (
     DEFAULT_BASE_DIR,
     DEFAULT_COMFY_DIR,
     resolve_runtime_config,
 )
-from src.core.utils import setup_logger, logger, kill_process_by_name
-from src.lib.network import setup_network, invalidate_network_cache, stop_proxy
-
-# 插件导入
-from src.addons.system.plugin import SystemAddon
-from src.addons.torch_engine.plugin import TorchAddon
-from src.addons.comfy_core.plugin import ComfyAddon
-from src.addons.workspace.plugin import WorkspaceAddon
-from src.addons.nodes.plugin import NodesAddon
-from src.addons.models.plugin import ModelAddon
-
+from src.core.utils import logger, setup_logger
+from src.lib.network import invalidate_network_cache, setup_network, stop_proxy
 
 # ============================================================
 # 全局常量
@@ -243,9 +239,6 @@ def main() -> None:
     runtime.workspace_dir.mkdir(parents=True, exist_ok=True)
     log_file = runtime.workspace_dir / "autodl-setup.log"
     setup_logger(log_file, debug=args.debug)
-
-    # 清理残留进程
-    kill_process_by_name("python.*src.main", exclude_pid=os.getpid())
 
     # setup 动作时清除网络状态缓存，确保走完整初始化流程
     # 其他动作以及独立 CLI（model download）则复用缓存

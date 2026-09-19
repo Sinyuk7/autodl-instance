@@ -8,6 +8,12 @@
 
 Collection of inspectable diagnostics, installers, lifecycle helpers, and recovery tools for ComfyUI on AutoDL. Codex CLI is expected to inspect the real host first and maintain the tools from `/root/autodl-instance`; do not assume the full pipeline is healthy or appropriate for every repair.
 
+## ACTIVE HOST HANDOFF
+
+After the pending AutoDL restart, read `docs/NEXT_SESSION_PLAN.md` before any
+host mutation. Verify all mounts again and preserve the uncommitted working
+tree; do not run lifecycle setup/start/stop commands merely to probe state.
+
 ## STRUCTURE
 
 ```
