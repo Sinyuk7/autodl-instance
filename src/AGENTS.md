@@ -24,19 +24,18 @@ src/
 
 ## PLUGIN PIPELINE
 
-Hardcoded execution order (setup) / reverse (sync):
+Hardcoded execution order (setup):
 
 1. `system` - UV package manager, cache migration
-2. `git_config` - Git/SSH credentials
-3. `torch_engine` - PyTorch CUDA setup
-4. `comfy_core` - ComfyUI installation
-5. `userdata` - User data symlinks
-6. `nodes` - Custom nodes management
-7. `models` - Model download/management
+2. `torch_engine` - PyTorch CUDA setup
+3. `comfy_core` - ComfyUI installation
+4. `workspace` - Local persistent working data
+5. `nodes` - Custom nodes management
+6. `models` - Model download/management
 
 ## CONVENTIONS
 
 - Plugins are classes in `addons/{name}/plugin.py`
 - Must inherit `BaseAddon` from `core.interface`
-- Must implement `setup()`, `start()`, `sync()` methods
+- Must implement `setup()`, `start()`, `stop()` methods
 - Plugin name = directory name (accessed via `self.name`)

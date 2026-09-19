@@ -2,7 +2,7 @@
 Lock 文件管理
 
 管理 model-lock.yaml 模型快照。
-快照在 sync 时通过扫描 models 目录生成，
+快照在 stop 时通过扫描 models 目录生成，
 记录当前所有模型文件的路径、哈希、类型及来源信息。
 
 目录结构（采用软链接方案后）:
@@ -239,4 +239,3 @@ def cleanup_orphan_metas(models_base: Path) -> int:
                 pass
 
     return cleaned
-

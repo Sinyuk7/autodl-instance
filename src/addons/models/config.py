@@ -22,14 +22,14 @@ _BASE_DIR = Path("/root/autodl-tmp")
 _MODELS_DIR_NAME = "models"
 
 
-def get_lock_file(userdata_dir: Path | None = None) -> Path:
-    """获取 Git 可同步的 model-lock.yaml 路径。"""
-    if userdata_dir is not None:
-        return userdata_dir / LOCK_FILE_NAME
+def get_lock_file(workspace_data_dir: Path | None = None) -> Path:
+    """Return the local model lock path."""
+    if workspace_data_dir is not None:
+        return workspace_data_dir / LOCK_FILE_NAME
 
     from src.core.runtime import resolve_runtime_config
 
-    return resolve_runtime_config(PROJECT_ROOT).userdata_dir / LOCK_FILE_NAME
+    return resolve_runtime_config(PROJECT_ROOT).workspace_data_dir / LOCK_FILE_NAME
 
 
 def get_legacy_lock_file(base_dir: Path | None = None) -> Path:

@@ -1,7 +1,7 @@
 """
 Artifacts - 插件间共享的强类型数据容器
 
-支持持久化到 JSON 文件，实现跨进程共享（setup → start → sync）。
+支持持久化到 JSON 文件，实现跨进程共享（setup → start → stop）。
 """
 import json
 from dataclasses import dataclass, fields
@@ -38,8 +38,8 @@ class Artifacts:
     snapshots_dir: Optional[Path] = None
     latest_snapshot: Optional[Path] = None
     
-    # ==================== UserdataAddon ====================
-    userdata_dir: Optional[Path] = None
+    # ==================== WorkspaceAddon ====================
+    workspace_data_dir: Optional[Path] = None
     
     # ==================== ModelAddon ====================
     models_dir: Optional[Path] = None

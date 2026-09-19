@@ -5,14 +5,12 @@ NetworkManager - 网络环境核心编排器
 
 代理策略:
   1. 如果配置了 mihomo（autodl secrets 有 mihomo_subscription_url，
-     或 my-comfyui-backup/mihomo/ 有手动上传的配置）→ 启动 mihomo
+     或 workspace/mihomo/ 有手动上传的配置）→ 启动 mihomo
   2. 否则 fallback 到 AutoDL 学术加速（/etc/network_turbo）
   3. 都没有 → 无代理模式
 
 配置持久化:
-  mihomo 配置通过 my-comfyui-backup/mihomo/ 目录持久化到 Git 仓库，
-  实现跨实例漫游。init 时从 backup 复制到 /etc/mihomo/，
-  sync 时把运行时变更同步回 backup。
+  mihomo 配置通过本地 workspace/mihomo/ 目录持久化到数据盘。
 """
 import logging
 import os
@@ -43,9 +41,9 @@ logger = logging.getLogger("autodl_setup")
 _PROXY_DIR = Path(__file__).resolve().parent / "proxy"
 _PROXY_MANIFEST = _PROXY_DIR / "manifest.yaml"
 
-_BACKUP_MIHOMO_DIR = "mihomo"
+_WORKSPACE_MIHOMO_DIR = "mihomo"
 
-# 需要在 backup ↔ /etc/mihomo 之间同步的文件
+# 需要在本地 workspace ↔ /etc/mihomo 之间持久化的文件
 _SYNC_FILES = [
     "config.yaml",   # Clash 订阅配置
     "cache.db",      # 节点选择记录（mihomo 自动生成）
@@ -63,10 +61,10 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         return {}
 
 
-def _get_backup_mihomo_dir() -> Path:
-    """获取 mihomo 持久化备份目录"""
+def _get_workspace_mihomo_dir() -> Path:
+    """获取 mihomo 本地 workspace 持久化目录"""
     code_root = Path(__file__).resolve().parent.parent.parent.parent
-    return resolve_runtime_config(code_root).userdata_dir / _BACKUP_MIHOMO_DIR
+    return resolve_runtime_config(code_root).workspace_data_dir / _WORKSPACE_MIHOMO_DIR
 
 
 def _get_local_secrets() -> Dict[str, Any]:
@@ -80,7 +78,7 @@ def _build_proxy_config() -> Optional[ProxyConfig]:
 
     判断是否启用 mihomo 的条件（满足任一即可）:
     1. 本机 secrets 中配置了 mihomo_subscription_url（在线订阅模式）
-    2. backup 目录中存在 config.yaml（手动上传模式）
+    2. workspace 目录中存在 config.yaml（手动配置模式）
 
     Returns:
         ProxyConfig 实例，如果两个条件都不满足则返回 None
@@ -92,11 +90,11 @@ def _build_proxy_config() -> Optional[ProxyConfig]:
         or ""
     )
 
-    # 检查 backup 目录是否有手动上传的配置
-    backup_config = _get_backup_mihomo_dir() / "config.yaml"
-    has_backup = backup_config.exists() and backup_config.stat().st_size > 100
+    # 检查 workspace 是否有手动配置
+    workspace_config = _get_workspace_mihomo_dir() / "config.yaml"
+    has_workspace_config = workspace_config.exists() and workspace_config.stat().st_size > 100
 
-    if not subscription_url and not has_backup:
+    if not subscription_url and not has_workspace_config:
         return None
 
     manifest = _load_yaml(_PROXY_MANIFEST)
@@ -157,8 +155,8 @@ class NetworkManager:
 
         self._initialized = True
 
-    def _restore_from_backup(self, config: ProxyConfig) -> bool:
-        """从 backup 目录恢复 mihomo 配置到运行时目录
+    def _restore_from_workspace(self, config: ProxyConfig) -> bool:
+        """从本地 workspace 恢复 mihomo 配置到运行时目录
 
         Args:
             config: 代理配置
@@ -166,10 +164,10 @@ class NetworkManager:
         Returns:
             True 表示成功恢复了配置
         """
-        backup_dir = _get_backup_mihomo_dir()
-        backup_config = backup_dir / "config.yaml"
+        workspace_dir = _get_workspace_mihomo_dir()
+        workspace_config = workspace_dir / "config.yaml"
 
-        if not backup_config.exists() or backup_config.stat().st_size < 100:
+        if not workspace_config.exists() or workspace_config.stat().st_size < 100:
             return False
 
         config.config_dir.mkdir(parents=True, exist_ok=True)
@@ -177,7 +175,7 @@ class NetworkManager:
         # 复制所有同步文件
         restored: List[str] = []
         for filename in _SYNC_FILES:
-            src = backup_dir / filename
+            src = workspace_dir / filename
             if src.exists() and src.stat().st_size > 0:
                 dst = config.config_dir / filename
                 shutil.copy2(src, dst)
@@ -190,27 +188,27 @@ class NetworkManager:
             return True
         return False
 
-    def _backup_config(self, config: ProxyConfig) -> None:
-        """将运行时配置备份到 backup 目录
+    def _persist_config(self, config: ProxyConfig) -> None:
+        """将运行时配置写入本地 workspace
 
         Args:
             config: 代理配置
         """
-        backup_dir = _get_backup_mihomo_dir()
+        workspace_dir = _get_workspace_mihomo_dir()
         runtime_config = config.config_dir / "config.yaml"
 
         if not runtime_config.exists() or runtime_config.stat().st_size < 100:
             return
 
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        workspace_dir.mkdir(parents=True, exist_ok=True)
 
         for filename in _SYNC_FILES:
             src = config.config_dir / filename
             if src.exists() and src.stat().st_size > 0:
-                dst = backup_dir / filename
+                dst = workspace_dir / filename
                 shutil.copy2(src, dst)
 
-        logger.debug(f"  -> 配置已备份到: {backup_dir}")
+        logger.debug(f"  -> 配置已写入 workspace: {workspace_dir}")
 
     def _setup_proxy(self, verbose: bool) -> None:
         """代理初始化 (带状态缓存加速)
@@ -221,8 +219,8 @@ class NetworkManager:
           3. 没有 mihomo 配置 → 直接用 turbo 兜底
 
         配置来源优先级:
-          1. backup 目录已有配置（手动上传 / 上次持久化）→ 恢复到运行时目录
-          2. subscription_url 在线下载 → 下载后备份到 backup 目录
+          1. workspace 已有配置 → 恢复到运行时目录
+          2. subscription_url 在线下载 → 写入 workspace
         """
         # ── 快速路径: 尝试复用上次的网络决策 ──
         if self._try_fast_path(verbose):
@@ -252,8 +250,8 @@ class NetworkManager:
             cache_network_decision("turbo")
             return
 
-        # 从 backup 恢复配置到 /etc/mihomo/
-        self._restore_from_backup(config)
+        # 从 workspace 恢复配置到 /etc/mihomo/
+        self._restore_from_workspace(config)
 
         # 订阅更新 — 利用失败缓存避免重复尝试
         if is_subscription_recently_failed():
@@ -282,8 +280,8 @@ class NetworkManager:
             # 订阅更新成功，清除失败标记
             mark_subscription_success()
 
-        # 启动成功前的配置已经就绪，备份一份到 backup
-        self._backup_config(config)
+        # 启动成功前的配置已经就绪，写入 workspace
+        self._persist_config(config)
 
         # 启动代理
         if not backend.start():
@@ -364,40 +362,35 @@ class NetworkManager:
             self._backend.stop()
             self._backend = None
 
-    def sync_config(self) -> None:
-        """将运行时 mihomo 配置同步回 backup 目录
-
-        应在 main.py 的 sync 动作中调用，把节点选择（cache.db）
-        等运行时变更持久化到 my-comfyui-backup/mihomo/，
-        随 userdata 的 git push 一起推送到远程仓库。
-        """
+    def persist_config(self) -> None:
+        """将运行时 mihomo 配置持久化到本地 workspace。"""
         config = _build_proxy_config()
         if config is None:
             return
 
-        backup_dir = _get_backup_mihomo_dir()
+        workspace_dir = _get_workspace_mihomo_dir()
         runtime_config = config.config_dir / "config.yaml"
 
         if not runtime_config.exists():
             return
 
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        workspace_dir.mkdir(parents=True, exist_ok=True)
 
-        synced: List[str] = []
+        persisted: List[str] = []
         for filename in _SYNC_FILES:
             src = config.config_dir / filename
             if src.exists() and src.stat().st_size > 0:
-                dst = backup_dir / filename
+                dst = workspace_dir / filename
                 # 只在内容变化时复制（避免无意义的 git diff）
                 if dst.exists() and dst.read_bytes() == src.read_bytes():
                     continue
                 shutil.copy2(src, dst)
-                synced.append(filename)
+                persisted.append(filename)
 
-        if synced:
-            logger.info(f"  -> mihomo 配置已同步到持久化目录: {', '.join(synced)}")
+        if persisted:
+            logger.info(f"  -> mihomo 配置已写入本地 workspace: {', '.join(persisted)}")
         else:
-            logger.debug(f"  -> mihomo 配置无变更，跳过同步")
+            logger.debug("  -> mihomo 配置无变更，跳过写入")
 
 
 # ── 全局单例 ────────────────────────────────────────────────
@@ -424,11 +417,6 @@ def setup_network(verbose: bool = True) -> None:
 def stop_proxy() -> None:
     """停止代理进程 (全局入口，供 shutdown 脚本调用)"""
     get_network_manager().stop_proxy()
-
-
-def sync_proxy_config() -> None:
-    """同步 mihomo 配置到持久化目录 (全局入口，供 sync 阶段调用)"""
-    get_network_manager().sync_config()
 
 
 def export_env_shell() -> str:

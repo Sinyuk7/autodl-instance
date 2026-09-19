@@ -92,7 +92,7 @@ class SystemAddon(BaseAddon):
         
         scripts = {
             "turbo": turbo_script,
-            "bye": command_script("bye", "AutoDL 离线同步命令"),
+            "stop": command_script("stop", "停止 ComfyUI 和代理"),
             "model": command_script("model", "ComfyUI 模型管理命令"),
             "status": command_script("status", "AutoDL 工作区状态检查"),
             "doctor": command_script("doctor", "AutoDL 工作区深度诊断"),
@@ -127,5 +127,5 @@ class SystemAddon(BaseAddon):
         pass
 
     @hookimpl
-    def sync(self, context: AppContext) -> None:
+    def stop(self, context: AppContext) -> None:
         pass

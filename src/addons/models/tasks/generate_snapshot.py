@@ -30,7 +30,7 @@ class GenerateSnapshotTask(BaseTask):
     
     def _get_lock_file_path(self, ctx: AppContext) -> Path:
         """获取 lock 文件路径"""
-        return get_lock_file(ctx.userdata_dir)
+        return get_lock_file(ctx.workspace_data_dir)
 
     def _load_previous_lock(self, ctx: AppContext) -> dict:
         """加载新路径 lock；缺失时兼容读取旧数据盘根目录 lock。"""

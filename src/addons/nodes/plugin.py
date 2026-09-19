@@ -205,7 +205,7 @@ class NodesAddon(BaseAddon):
         pass
 
     @hookimpl
-    def sync(self, context: AppContext) -> PluginResult:
+    def stop(self, context: AppContext) -> PluginResult:
         logger.info("\n>>> [Nodes] 保存节点快照...")
         ctx = context
         

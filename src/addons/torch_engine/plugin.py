@@ -132,5 +132,5 @@ class TorchAddon(BaseAddon):
         pass
 
     @hookimpl
-    def sync(self, context: AppContext) -> None:
+    def stop(self, context: AppContext) -> None:
         pass

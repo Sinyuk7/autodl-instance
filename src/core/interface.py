@@ -50,7 +50,7 @@ class AppContext:
     # === RFC-007 路径语义 ===
     code_root: Optional[Path] = None
     workspace_dir: Optional[Path] = None
-    userdata_dir: Optional[Path] = None
+    workspace_data_dir: Optional[Path] = None
     models_dir: Optional[Path] = None
     config_file: Optional[Path] = None
     local_config: Dict[str, Any] = field(default_factory=lambda: {})
@@ -61,8 +61,8 @@ class AppContext:
             self.code_root = self.project_root
         if self.workspace_dir is None:
             self.workspace_dir = self.base_dir / "autodl-workspace"
-        if self.userdata_dir is None:
-            self.userdata_dir = self.base_dir / "my-comfyui-backup"
+        if self.workspace_data_dir is None:
+            self.workspace_data_dir = self.base_dir / "comfyui-workspace"
         if self.models_dir is None:
             self.models_dir = self.base_dir / "models"
 
@@ -109,7 +109,7 @@ class BaseAddon:
         默认返回空列表，保持向后兼容。
         
         Args:
-            phase: 生命周期阶段 ("setup" | "start" | "sync")
+            phase: 生命周期阶段 ("setup" | "start" | "stop")
             
         Returns:
             该阶段需要执行的 Task 列表
@@ -127,6 +127,6 @@ class BaseAddon:
         ...
     
     @hookspec
-    def sync(self, context: AppContext) -> None:
-        """同步钩子"""
+    def stop(self, context: AppContext) -> None:
+        """停止钩子"""
         ...

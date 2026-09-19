@@ -18,9 +18,8 @@ from src.core.runtime import (
     DEFAULT_MODELS_NAME,
     DEFAULT_SECRETS_FILE,
     SECRET_KEY_ALIASES,
-    DEFAULT_USERDATA_NAME,
+    DEFAULT_WORKSPACE_DATA_NAME,
     DEFAULT_WORKSPACE_NAME,
-    find_legacy_userdata_dirs,
     normalize_config_key,
     normalize_secret_key,
     resolve_runtime_config,
@@ -28,7 +27,7 @@ from src.core.runtime import (
 from src.lib.utils import load_yaml, save_yaml
 
 
-PATH_CONFIG_KEYS = {"base_dir", "workspace_dir", "userdata_dir", "comfy_dir", "models_dir"}
+PATH_CONFIG_KEYS = {"base_dir", "workspace_dir", "workspace_data_dir", "comfy_dir", "models_dir"}
 CONFIG_SET_KEYS = tuple(CONFIG_KEY_ALIASES.keys())
 SECRET_SET_KEYS = tuple(SECRET_KEY_ALIASES.keys())
 
@@ -61,27 +60,25 @@ def _save_local_yaml(path: Path, data: dict, mode: int | None = None) -> None:
 def _write_init_config(args: argparse.Namespace) -> None:
     base_dir = args.base_dir
     workspace_dir = args.workspace_dir or (base_dir / DEFAULT_WORKSPACE_NAME)
-    userdata_dir = args.userdata_dir or (base_dir / DEFAULT_USERDATA_NAME)
+    workspace_data_dir = args.workspace_data_dir or (base_dir / DEFAULT_WORKSPACE_DATA_NAME)
     models_dir = args.models_dir or (base_dir / DEFAULT_MODELS_NAME)
 
     data = {
         "base_dir": str(base_dir),
         "workspace_dir": str(workspace_dir),
-        "userdata_dir": str(userdata_dir),
+        "workspace_data_dir": str(workspace_data_dir),
         "comfy_dir": str(args.comfy_dir),
         "models_dir": str(models_dir),
     }
-    if args.userdata_repo:
-        data["userdata_repo"] = args.userdata_repo
 
     config_file = args.config_file
     _save_local_yaml(config_file, data)
 
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    userdata_dir.parent.mkdir(parents=True, exist_ok=True)
+    workspace_data_dir.parent.mkdir(parents=True, exist_ok=True)
     print(f"配置已写入: {config_file}")
     print(f"workspace_dir: {workspace_dir}")
-    print(f"userdata_dir: {userdata_dir}")
+    print(f"workspace_data_dir: {workspace_data_dir}")
 
 
 def _dispatch_config(args: argparse.Namespace) -> None:
@@ -153,24 +150,6 @@ def _dispatch_secrets(args: argparse.Namespace) -> None:
     raise SystemExit(f"未知 secrets 命令: {args.secrets_command}")
 
 
-def _dispatch_migrate(args: argparse.Namespace) -> None:
-    runtime = resolve_runtime_config(_code_root(), config_file=args.config_file)
-
-    if args.migrate_command == "detect-old-layout":
-        legacy_dirs = find_legacy_userdata_dirs(runtime.code_root, runtime.base_dir, runtime.userdata_dir)
-        if legacy_dirs:
-            print("检测到旧布局数据目录")
-            for path in legacy_dirs:
-                print(f"old: {path}")
-            print(f"new: {runtime.userdata_dir}")
-            print("此命令只读检测，不会移动或删除任何文件。")
-        else:
-            print("未检测到旧布局数据目录。")
-        return
-
-    raise SystemExit(f"未知 migrate 命令: {args.migrate_command}")
-
-
 def _dispatch_lifecycle(action: str, argv: Sequence[str]) -> None:
     from src.main import main as lifecycle_main
 
@@ -216,11 +195,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="AutoDL ComfyUI workspace manager")
     sub = parser.add_subparsers(dest="command")
 
-    init = sub.add_parser("init", help="bind local config and userdata repo")
-    init.add_argument("--userdata-repo", default="", help="Git URL for the user data repo")
+    init = sub.add_parser("init", help="configure the local AutoDL workspace")
     init.add_argument("--base-dir", type=Path, default=DEFAULT_BASE_DIR)
     init.add_argument("--workspace-dir", type=Path)
-    init.add_argument("--userdata-dir", type=Path)
+    init.add_argument("--workspace-data-dir", type=Path)
     init.add_argument("--comfy-dir", type=Path, default=DEFAULT_COMFY_DIR)
     init.add_argument("--models-dir", type=Path)
     init.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
@@ -246,18 +224,12 @@ def build_parser() -> argparse.ArgumentParser:
     secrets_unset = secrets_sub.add_parser("unset", help="unset a secret")
     secrets_unset.add_argument("key", choices=SECRET_SET_KEYS)
 
-    migrate = sub.add_parser("migrate", help="read-only migration helpers")
-    migrate.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
-    migrate_sub = migrate.add_subparsers(dest="migrate_command", required=True)
-    migrate_sub.add_parser("detect-old-layout", help="detect old source-layout userdata")
-
-    for action in ("setup", "start", "sync"):
+    for action in ("setup", "start", "stop"):
         p = sub.add_parser(action, help=f"run {action} lifecycle")
         p.add_argument("--debug", action="store_true")
         p.add_argument("--until", type=str)
         p.add_argument("--only", type=str)
 
-    sub.add_parser("bye", help="sync then stop proxy")
     sub.add_parser("status", help="quick read-only status")
     sub.add_parser("doctor", help="deep read-only diagnostics")
     sub.add_parser("turbo", help="print shell exports for network env")
@@ -279,7 +251,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.command == "init":
-        print("warning: `autodl init` is deprecated; use `autodl config set ...` instead.", file=sys.stderr)
         _write_init_config(args)
         return
 
@@ -291,11 +262,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         _dispatch_secrets(args)
         return
 
-    if args.command == "migrate":
-        _dispatch_migrate(args)
-        return
-
-    if args.command in ("setup", "start", "sync"):
+    if args.command in ("setup", "start", "stop"):
         lifecycle_args = []
         if args.debug:
             lifecycle_args.append("--debug")
@@ -304,12 +271,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         if args.only:
             lifecycle_args.extend(["--only", args.only])
         _dispatch_lifecycle(args.command, lifecycle_args)
-        return
-
-    if args.command == "bye":
-        from src.shutdown import main as shutdown_main
-
-        shutdown_main()
         return
 
     if args.command in ("status", "doctor"):

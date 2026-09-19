@@ -24,9 +24,6 @@ autodl = "src.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"my-comfyui-backup.example" = "my-comfyui-backup.example"
-
 [tool.hatch.build]
 exclude = [
   "src/**/secrets.yaml",

@@ -30,8 +30,6 @@ class StateKey(str, Enum):
     # NodesAddon
     NODES_RESTORED = "nodes_restored"
     
-    # UserdataAddon
-    USERDATA_INITIALIZED = "userdata_initialized"
     
     # ModelAddon
     EXTRA_PATHS_CONFIGURED = "extra_paths_configured"

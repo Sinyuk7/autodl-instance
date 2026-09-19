@@ -19,19 +19,15 @@ from src.core.runtime import (
     DEFAULT_BASE_DIR,
     DEFAULT_COMFY_DIR,
     resolve_runtime_config,
-    find_legacy_userdata_dirs,
-    read_expected_tool_version,
-    get_tool_version,
 )
 from src.core.utils import setup_logger, logger, kill_process_by_name
-from src.lib.network import setup_network, sync_proxy_config, invalidate_network_cache
+from src.lib.network import setup_network, invalidate_network_cache, stop_proxy
 
 # 插件导入
 from src.addons.system.plugin import SystemAddon
-from src.addons.git_config.plugin import GitAddon
 from src.addons.torch_engine.plugin import TorchAddon
 from src.addons.comfy_core.plugin import ComfyAddon
-from src.addons.userdata.plugin import UserdataAddon
+from src.addons.workspace.plugin import WorkspaceAddon
 from src.addons.nodes.plugin import NodesAddon
 from src.addons.models.plugin import ModelAddon
 
@@ -50,22 +46,20 @@ def create_pipeline() -> List[BaseAddon]:
     
     顺序说明：
     1. system       - 基础设施（uv, comfy-cli, 缓存迁移）
-    2. git_config   - Git/SSH 配置
-    3. torch_engine - PyTorch CUDA 环境
-    4. comfy_core   - ComfyUI 核心安装 → 产出 comfy_dir
-    5. userdata     - 用户数据软链接 → 依赖 comfy_dir
-    6. nodes        - 节点管理 → 依赖 comfy_dir, user_dir
-    7. models       - 模型管理 → 依赖 comfy_dir
+    2. torch_engine - PyTorch CUDA 环境
+    3. comfy_core   - ComfyUI 核心安装 → 产出 comfy_dir
+    4. workspace    - 本地工作数据持久化 → 依赖 comfy_dir
+    5. nodes        - 节点管理 → 依赖 comfy_dir
+    6. models       - 模型管理 → 依赖 comfy_dir
     
     注意: 代理服务（turbo / mihomo）在 setup_network() 中已初始化，
     不作为 pipeline 插件，因为所有插件都依赖网络。
     """
     return [
         SystemAddon(),
-        GitAddon(),
         TorchAddon(),
         ComfyAddon(),
-        UserdataAddon(),
+        WorkspaceAddon(),
         NodesAddon(),
         ModelAddon(),
     ]
@@ -123,37 +117,13 @@ def load_manifests(code_root: Path) -> Dict[str, Dict[str, Any]]:
     return manifests or _load_manifests_from_package()
 
 
-def warn_runtime_migration(context: AppContext) -> None:
-    """Emit non-blocking RFC-007 migration/version warnings."""
-    code_root = context.code_root or context.project_root
-    userdata_dir = context.userdata_dir or context.base_dir / "my-comfyui-backup"
-
-    legacy_dirs = find_legacy_userdata_dirs(code_root, context.base_dir, userdata_dir)
-    if legacy_dirs:
-        logger.warning(
-            "  -> [WARN] 检测到旧布局数据目录: %s；新写入位置为: %s。"
-            "请确认迁移后再删除旧目录。",
-            ", ".join(str(path) for path in legacy_dirs),
-            userdata_dir,
-        )
-
-    expected_version = read_expected_tool_version(userdata_dir)
-    current_version = get_tool_version()
-    if expected_version and expected_version != current_version:
-        logger.warning(
-            "  -> [WARN] data repo 期望工具版本为 %s，当前工具版本为 %s",
-            expected_version,
-            current_version,
-        )
-
-
 def create_context(debug: bool = False, load_artifacts: bool = False) -> AppContext:
     """
     创建应用上下文
     
     Args:
         debug: 调试模式
-        load_artifacts: 是否从持久化文件加载 artifacts（用于 start/sync 阶段）
+        load_artifacts: 是否从持久化文件加载 artifacts（用于 start/stop 阶段）
     """
     code_root = Path(__file__).resolve().parent.parent
     runtime = resolve_runtime_config(code_root)
@@ -170,7 +140,7 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
         code_root=runtime.code_root,
         base_dir=runtime.base_dir,
         workspace_dir=runtime.workspace_dir,
-        userdata_dir=runtime.userdata_dir,
+        workspace_data_dir=runtime.workspace_data_dir,
         models_dir=runtime.models_dir,
         comfy_dir=runtime.comfy_dir,
         config_file=runtime.config_file,
@@ -181,7 +151,6 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
         debug=debug,
         addon_manifests=load_manifests(runtime.code_root),
     )
-    warn_runtime_migration(context)
     return context
 
 
@@ -195,17 +164,13 @@ def execute(
     执行插件 Pipeline
     
     Args:
-        action: 生命周期动作 (setup/start/sync)
+        action: 生命周期动作 (setup/start/stop)
         context: 应用上下文
         until: 执行到指定插件为止（包含）
         only: 只执行指定插件（跳过依赖，危险模式）
     """
     pipeline = create_pipeline()
     result = PipelineResult(action=action)
-    
-    # sync 动作逆序执行
-    if action == "sync":
-        pipeline = list(reversed(pipeline))
     
     # --only: 只执行单个插件
     if only:
@@ -219,11 +184,11 @@ def execute(
         if method:
             try:
                 plugin_result = method(context)
-                if action == "sync" and isinstance(plugin_result, PluginResult):
+                if action == "stop" and isinstance(plugin_result, PluginResult):
                     result.add_plugin_result(addon.name, plugin_result)
             except Exception as e:
-                if action == "sync":
-                    logger.error(f"  -> [{addon.name}] sync 失败: {e}")
+                if action == "stop":
+                    logger.error(f"  -> [{addon.name}] stop 失败: {e}")
                     result.add_failure(addon.name, str(e))
                     return result
                 raise
@@ -238,11 +203,11 @@ def execute(
         if method:
             try:
                 plugin_result = method(context)
-                if action == "sync" and isinstance(plugin_result, PluginResult):
+                if action == "stop" and isinstance(plugin_result, PluginResult):
                     result.add_plugin_result(addon.name, plugin_result)
             except Exception as e:
-                if action == "sync":
-                    logger.error(f"  -> [{addon.name}] sync 失败: {e}")
+                if action == "stop":
+                    logger.error(f"  -> [{addon.name}] stop 失败: {e}")
                     result.add_failure(addon.name, str(e))
                     continue
                 raise
@@ -252,7 +217,7 @@ def execute(
             logger.info(f"  -> 已到达目标插件 [{until}]，停止")
             break
     
-    # setup 完成后持久化 artifacts，供后续 start/sync 使用
+    # setup 完成后持久化 artifacts，供后续 start/stop 使用
     if action == "setup":
         try:
             artifacts_dir = context.workspace_dir or context.project_root
@@ -267,7 +232,7 @@ def execute(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AutoDL 自动化装配调度器")
-    parser.add_argument("action", choices=["setup", "start", "sync"], help="生命周期动作")
+    parser.add_argument("action", choices=["setup", "start", "stop"], help="生命周期动作")
     parser.add_argument("--debug", action="store_true", help="调试模式")
     parser.add_argument("--until", type=str, help="执行到指定插件为止")
     parser.add_argument("--only", type=str, help="只执行指定插件（危险模式）")
@@ -283,7 +248,7 @@ def main() -> None:
     kill_process_by_name("python.*src.main", exclude_pid=os.getpid())
 
     # setup 动作时清除网络状态缓存，确保走完整初始化流程
-    # 其他动作（start/sync）以及独立 CLI（model download）则复用缓存
+    # 其他动作以及独立 CLI（model download）则复用缓存
     if args.action == "setup":
         invalidate_network_cache()
 
@@ -291,18 +256,15 @@ def main() -> None:
     setup_network()
 
     # 创建上下文并执行
-    # start/sync 需要加载 setup 阶段持久化的 artifacts
-    load_artifacts = args.action in ("start", "sync")
+    # start/stop 需要加载 setup 阶段持久化的 artifacts
+    load_artifacts = args.action in ("start", "stop")
     context = create_context(debug=args.debug, load_artifacts=load_artifacts)
 
-    # sync 阶段：先将 mihomo 运行时配置同步回持久化目录
-    # 必须在 execute 之前，因为 userdata addon 的 sync 会 git add . && push
-    if args.action == "sync":
-        sync_proxy_config()
-
     result = execute(args.action, context, until=args.until, only=args.only)
-    if args.action == "sync" and not result.ok:
-        logger.error("\n>>> 同步失败：")
+    if args.action == "stop":
+        stop_proxy()
+    if args.action == "stop" and not result.ok:
+        logger.error("\n>>> 停止失败：")
         for issue in result.failures:
             logger.error(f"  -> [{issue.plugin}] {issue.message}")
             if issue.next_step:

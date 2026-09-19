@@ -86,7 +86,7 @@ class ModelAddon(BaseAddon):
         pass
 
     @hookimpl
-    def sync(self, context: AppContext) -> PluginResult:
+    def stop(self, context: AppContext) -> PluginResult:
         """同步钩子：运行 Sync 阶段 Task"""
         logger.info("\n>>> [Models] 开始同步模型数据...")
 
@@ -120,6 +120,6 @@ class ModelAddon(BaseAddon):
         if not ok:
             return PluginResult.failure(
                 "模型同步任务失败，model-lock.yaml 可能没有更新",
-                "请查看 /root/autodl-tmp/autodl-setup.log，修复后重新运行 bye",
+                "请查看 /root/autodl-tmp/autodl-workspace/autodl-setup.log，修复后重新运行 stop",
             )
         return PluginResult.success("模型数据同步完成")

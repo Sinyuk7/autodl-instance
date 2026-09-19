@@ -9,7 +9,7 @@ Task Subsystem - 细粒度任务抽象
 使用方式:
     1. 继承 BaseTask 实现 execute() 方法
     2. 在 Addon 的 get_tasks() 中返回 Task 列表
-    3. 在 setup()/start()/sync() 中调用 TaskRunner.run_tasks()
+    3. 在 setup()/start()/stop() 中调用 TaskRunner.run_tasks()
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

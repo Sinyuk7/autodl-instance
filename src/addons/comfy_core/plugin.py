@@ -133,14 +133,11 @@ class ComfyAddon(BaseAddon):
             logger.info("  -> ComfyUI 核心引擎装配完成！")
             self.log(ctx, "setup", "installed")
         
-        # 设置 output 软链接（指向 tmp 盘）
-        self._setup_output_symlink(ctx, comfy_dir)
-        
         # 产出：供后续插件使用
         ctx.artifacts.comfy_dir = comfy_dir
         ctx.artifacts.custom_nodes_dir = comfy_dir / "custom_nodes"
         ctx.artifacts.user_dir = comfy_dir / "user"
-        ctx.artifacts.output_dir = self._get_output_target_dir(ctx)
+        ctx.artifacts.output_dir = None
 
     @hookimpl
     def start(self, context: AppContext) -> None:
@@ -157,7 +154,7 @@ class ComfyAddon(BaseAddon):
                 project_root=ctx.project_root,
                 base_dir=ctx.base_dir,
                 workspace_dir=ctx.workspace_dir,
-                userdata_dir=ctx.userdata_dir,
+                workspace_data_dir=ctx.workspace_data_dir,
                 comfy_dir=comfy_dir,
             )
             problems = [check for check in checks if check.is_problem]
@@ -176,11 +173,12 @@ class ComfyAddon(BaseAddon):
         try:
             ctx.cmd.run([
                 "comfy", "--workspace", str(comfy_dir), "launch",
-                "--", "--port", str(port), "--listen", "127.0.0.1"
+                "--", "--port", str(port), "--listen", "0.0.0.0"
             ], check=True, capture_output=False)
         except KeyboardInterrupt:
             logger.info("\n  -> 服务已安全关闭。")
 
     @hookimpl
-    def sync(self, context: AppContext) -> None:
-        pass
+    @hookimpl
+    def stop(self, context: AppContext) -> None:
+        release_port(self.DEFAULT_PORT)
