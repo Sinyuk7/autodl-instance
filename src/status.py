@@ -7,9 +7,10 @@ doctor does not start proxy processes or mutate runtime state.
 import argparse
 import os
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import Iterable, List
 
 from src.addons.models.config import get_lock_file, get_models_base
 from src.addons.models.status import collect_lock_status
