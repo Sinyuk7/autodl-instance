@@ -2,7 +2,7 @@
 from src.main import execute
 
 
-def test_full_setup_preserves_files_and_links_storage(context_with_home):
+def test_full_setup_installs_without_migrating_or_linking_storage(context_with_home):
     ctx = context_with_home
     (ctx.comfy_dir / "models").mkdir()
     (ctx.comfy_dir / "models" / "example.bin").write_bytes(b"model")
@@ -10,10 +10,10 @@ def test_full_setup_preserves_files_and_links_storage(context_with_home):
     (ctx.comfy_dir / "user" / "workflow.json").write_text("{}")
     execute("setup", ctx)
     assert ctx.artifacts.comfy_dir == ctx.comfy_dir
-    assert (ctx.comfy_dir / "models").resolve() == ctx.models_dir
-    assert (ctx.models_dir / "example.bin").read_bytes() == b"model"
+    assert not (ctx.comfy_dir / "models").is_symlink()
+    assert (ctx.comfy_dir / "models" / "example.bin").read_bytes() == b"model"
     assert (ctx.comfy_dir / "user" / "workflow.json").read_text() == "{}"
-    assert (ctx.comfy_dir / "output").resolve() == ctx.output_dir
+    assert not (ctx.comfy_dir / "output").is_symlink()
     assert (ctx.workspace_dir / ".artifacts.json").exists()
     commands = ctx.cmd.all_commands
     assert any(str(ctx.python_env_dir / "bin/comfy") in c for c in commands)

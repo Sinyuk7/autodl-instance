@@ -201,13 +201,13 @@ class TestMain:
         })()
         with patch("src.main.resolve_runtime_config", return_value=runtime), \
              patch("src.main.setup_logger"), \
-             patch("src.main.setup_network"), \
+             patch("src.lib.network.setup_network"), \
              patch("src.main.create_context") as mock_ctx, \
              patch("src.main.execute") as mock_exec:
             yield {
                 "create_context": mock_ctx,
                 "execute": mock_exec,
-                "setup_network": __import__("src.main", fromlist=["setup_network"]).setup_network,
+                "setup_network": __import__("src.lib.network", fromlist=["setup_network"]).setup_network,
             }
 
     @pytest.mark.parametrize("action", ["setup", "start", "stop"])
@@ -216,10 +216,7 @@ class TestMain:
         monkeypatch.setattr("sys.argv", ["main.py", action])
         main()
         assert mock_dependencies["execute"].call_args[0][0] == action
-        if action == "setup":
-            mock_dependencies["setup_network"].assert_called_once_with()
-        else:
-            mock_dependencies["setup_network"].assert_not_called()
+        mock_dependencies["setup_network"].assert_not_called()
 
     def test_invalid_action_rejected(self, mock_dependencies, monkeypatch):
         """无效 action 被 argparse 拒绝"""
@@ -262,11 +259,11 @@ class TestMain:
         
         with patch("src.main.resolve_runtime_config", return_value=runtime), \
              patch("src.main.setup_logger", side_effect=lambda *a, **kw: call_order.append("logger")), \
-             patch("src.main.setup_network", side_effect=lambda: call_order.append("network")), \
+             patch("src.lib.network.setup_network", side_effect=lambda: call_order.append("network")), \
              patch("src.main.create_context", side_effect=lambda **kw: call_order.append("context")), \
              patch("src.main.execute", side_effect=lambda *a, **kw: call_order.append("execute")):
             
             monkeypatch.setattr("sys.argv", ["main.py", "setup"])
             main()
         
-        assert call_order == ["logger", "context", "network", "execute"]
+        assert call_order == ["logger", "context", "execute"]

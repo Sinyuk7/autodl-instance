@@ -80,15 +80,30 @@ def _write_init_config(args: argparse.Namespace) -> None:
                         ("workspace_data_dir", DEFAULT_WORKSPACE_DATA_NAME)):
         value = getattr(args, key) or data.get(key) or (Path(data["base_dir"]) / suffix)
         data[key] = _normalize_config_value(key, str(value))
-    paths = [Path(data[key]) for key in PATH_CONFIG_KEYS]
+    # Use the same process-level path overrides as setup/start/migrate, without
+    # persisting transient environment values into the user's configuration.
+    effective = dict(data)
+    for key in PATH_CONFIG_KEYS - {"python_env_dir"}:
+        override = os.environ.get("AUTODL_" + key.upper())
+        if key == "models_dir":
+            override = override or os.environ.get("COMFYUI_MODELS_DIR")
+        if override:
+            effective[key] = _normalize_config_value(key, override)
+    from src.core.data_layout import DataLayout
+    layout = DataLayout(Path(effective["comfy_dir"]), Path(effective["models_dir"]),
+                        Path(effective["output_dir"]), Path(effective["workspace_data_dir"]) / "user")
+    layout.validate()
+    paths = [Path(effective[key]) for key in PATH_CONFIG_KEYS]
     require_managed_storage_mount(*paths)
     from src.core.python_env import validate_env_path
     validate_env_path(Path(data["python_env_dir"]))
     for key in ("workspace_dir", "workspace_data_dir", "models_dir", "output_dir",
                 "downloads_dir", "cache_dir", "temp_dir"):
-        Path(data[key]).mkdir(parents=True, exist_ok=True)
-    _save_local_yaml(args.config_file, data)
-    print(f"配置已写入: {args.config_file}")
+        Path(effective[key]).mkdir(parents=True, exist_ok=True)
+    layout.initialize()
+    if load_yaml(args.config_file) != data:
+        _save_local_yaml(args.config_file, data)
+    print(f"配置已就绪: {args.config_file}")
 
 
 def _dispatch_init(args: argparse.Namespace) -> None:
@@ -214,7 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="AutoDL ComfyUI workspace manager")
     sub = parser.add_subparsers(dest="command")
 
-    init = sub.add_parser("init", help="configure the local AutoDL workspace")
+    init = sub.add_parser("init", help="prepare storage links and proxy on each boot")
     init.add_argument("--base-dir", type=Path, default=None)
     init.add_argument("--workspace-dir", type=Path)
     init.add_argument("--workspace-data-dir", type=Path)
@@ -226,6 +241,9 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--temp-dir", type=Path)
     init.add_argument("--python-env-dir", type=Path)
     init.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
+
+    migrate = sub.add_parser("migrate", help="explicitly move existing data; does not switch links")
+    migrate.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
 
     config = sub.add_parser("config", help="manage non-sensitive local config")
     config.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
@@ -274,6 +292,14 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if args.command == "init":
         _dispatch_init(args)
+        return
+
+    if args.command == "migrate":
+        from src.core.data_layout import DataLayout
+        runtime = resolve_runtime_config(_code_root(), config_file=args.config_file)
+        DataLayout(runtime.comfy_dir, runtime.models_dir, runtime.output_dir,
+                   runtime.workspace_data_dir / "user").migrate()
+        print("数据迁移完成；请执行 autodl init 建立链接。")
         return
 
     if args.command == "config":

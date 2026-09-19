@@ -11,9 +11,7 @@ from typing import Any, Dict, List
 import yaml
 
 from src.addons.comfy_core.plugin import ComfyAddon
-from src.addons.models.plugin import ModelAddon
 from src.addons.system.plugin import SystemAddon
-from src.addons.workspace.plugin import WorkspaceAddon
 from src.core.adapters import FileStateManager, SubprocessRunner
 from src.core.artifacts import Artifacts
 from src.core.interface import AppContext, BaseAddon
@@ -26,7 +24,7 @@ from src.core.runtime import (
     resolve_runtime_config,
 )
 from src.core.utils import logger, setup_logger
-from src.lib.network import setup_network, stop_proxy
+from src.lib.network import stop_proxy
 
 # ============================================================
 # 全局常量
@@ -37,24 +35,8 @@ DEFAULT_PORT = 6006
 
 
 def create_pipeline() -> List[BaseAddon]:
-    """
-    定义插件执行顺序（硬编码，显式声明）
-    
-    顺序说明：
-    1. system       - uv 与独立 Python 环境
-    2. comfy_core   - comfy-cli 安装 ComfyUI 和 Python 依赖
-    3. workspace    - 本地工作数据持久化 → 依赖 comfy_dir
-    4. models       - 模型存储迁移与目录布局 → 依赖 comfy_dir
-    
-    注意: 代理服务（turbo / mihomo）在 setup_network() 中已初始化，
-    不作为 pipeline 插件，因为所有插件都依赖网络。
-    """
-    return [
-        SystemAddon(),
-        ComfyAddon(),
-        WorkspaceAddon(),
-        ModelAddon(),
-    ]
+    """Installation only; data layout belongs to init/migrate."""
+    return [SystemAddon(), ComfyAddon()]
 
 
 def _load_manifests_from_package() -> Dict[str, Dict[str, Any]]:
@@ -222,11 +204,6 @@ def main() -> None:
     setup_logger(log_file, debug=args.debug)
 
     context = create_context(debug=args.debug, load_artifacts=args.action in ("start", "stop"))
-
-    # Only mutating setup initializes networking. Read-only commands and stop
-    # must never start a proxy merely to discover current state.
-    if args.action == "setup":
-        setup_network()
 
     # 创建上下文并执行
     # start/stop 需要加载 setup 阶段持久化的 artifacts

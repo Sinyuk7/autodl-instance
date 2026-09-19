@@ -4,22 +4,24 @@
 
 ## init
 
-合并已有配置和显式参数，补齐默认路径，验证受管存储挂载，创建数据目录并保存配置。然后初始化网络：优先配置的 Mihomo，健康进程复用；无配置时尝试 AutoDL 学术加速，否则直连。配置失败不回滚已创建目录。
+合并已有配置和显式参数，补齐默认路径，验证受管存储挂载，预检全部 models/output/user 路径，创建缺失数据目录和安全软链接；已有非空实体目录或错误链接时报错，配置不变时不重写。安装前不创建 ComfyUI 源码目录。然后初始化网络：优先配置的 Mihomo，健康进程复用；无配置时尝试 AutoDL 学术加速，否则直连。配置失败不回滚已创建目录。
 
 Mihomo 配置固定在本机 config.yaml 同级的 mihomo 目录，默认 ~/.config/autodl-instance/mihomo。历史数据盘代理配置不会自动迁移，也不会自动停止不属于新配置的进程。
 
 ## setup
 
-先构造上下文和验证挂载，再初始化网络并顺序执行：
+先构造上下文和验证挂载，使用调用进程的网络环境并顺序执行：
 
 1. system：系统工具、uv、独立 venv。复用可用 uv，不写 shell 配置。
 2. comfy_core：在同一 venv 安装最新版 comfy-cli，用常规安装流程安装 ComfyUI 最新稳定版及其依赖。不维护依赖清单或版本锁定，不使用 fast-deps 或本机版本快照约束解析。依赖由 comfy-cli 和 ComfyUI requirements.txt 决定，安装后仅检查依赖一致性与 Torch 导入。环境内完成标记和现有 main.py 共同决定是否跳过；重复 setup 不自动升级已完成的 ComfyUI。
-3. workspace：迁移 user/output 并创建软链接，同名冲突保留。
-4. models：迁移模型并连接 models_dir，错误软链接或普通文件拒绝覆盖。
 
 GPU 类型仅指定 NVIDIA，CUDA wheel 选择交给 comfy-cli，不在项目内固定。安装不以 GPU 可用为前提，不修改驱动或基础 Conda；GPU 推理需另行验证。
 
 任何 setup 异常停止后续步骤，成功保存 artifacts。仅支持完整 setup/start/stop，不提供跳过依赖的局部执行参数。
+
+## migrate
+
+显式执行数据搬迁，不安装依赖、不初始化网络、不创建链接。DataLayout 先预检所有源和目标，拒绝目录重叠、错误软链接和文件占位。实体 models/user/output 的新文件搬到目标，同名不同内容源文件存入冲突目录，同内容源副本去重。保留空源目录供 init 建立链接。重复执行安全，但不是整体事务；执行时应停止其他数据写入者。
 
 ## start / stop
 

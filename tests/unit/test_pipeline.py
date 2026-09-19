@@ -6,7 +6,7 @@ from src.main import create_pipeline, execute
 from src.core.results import PluginResult
 
 
-PLUGIN_NAMES = ["system", "comfy_core", "workspace", "models"]
+PLUGIN_NAMES = ["system", "comfy_core"]
 
 
 def test_create_pipeline_returns_current_order():

@@ -40,7 +40,7 @@ class MyAddon(BaseAddon):
 | Install system tools | `system/plugin.py` - uv and dedicated venv |
 | PyTorch setup | `comfy_core/plugin.py`; comfy-cli manages dependencies in the dedicated venv |
 | ComfyUI install | `comfy_core/plugin.py` - Uses `comfy-cli` |
-| Persistent workspace links | `workspace/plugin.py` - Connect system-disk ComfyUI to data-disk state |
+| Persistent workspace links | `src/core/data_layout.py` - init validates/links; migrate explicitly merges data |
 | Model downloads | `models/downloader.py` - staging via aria2 |
 
 ## CONVENTIONS

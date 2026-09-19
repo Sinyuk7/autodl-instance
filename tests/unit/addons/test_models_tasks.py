@@ -63,7 +63,7 @@ def test_migrate_directory_preserves_all_distinct_conflicts(tmp_path, caplog):
     assert not (conflicts / ".cache.meta").exists()
 
 
-def test_migrate_preserves_conflict_and_builds_symlink(context_with_comfy, caplog):
+def test_migrate_preserves_conflict_without_linking(context_with_comfy, caplog):
     task = MigrateExistingModelsTask()
     comfy_models = context_with_comfy.artifacts.comfy_dir / "models"
     target_models = context_with_comfy.base_dir / "models"
@@ -76,13 +76,13 @@ def test_migrate_preserves_conflict_and_builds_symlink(context_with_comfy, caplo
         result = task.execute(context_with_comfy)
 
     assert result == TaskResult.SUCCESS
-    assert comfy_models.is_symlink()
-    assert comfy_models.resolve() == target_models.resolve()
+    assert not comfy_models.is_symlink()
+    assert list(comfy_models.iterdir()) == []
     assert (target_models.parent / ".autodl-model-conflicts" / "model.safetensors").read_bytes() == b"src-model"
     assert (target_models / "model.safetensors").read_bytes() == b"dst-model"
 
 
-def test_migrate_empty_directory_tree_builds_symlink(context_with_comfy):
+def test_migrate_empty_directory_tree_leaves_empty_source(context_with_comfy):
     task = MigrateExistingModelsTask()
     comfy_models = context_with_comfy.artifacts.comfy_dir / "models"
     target_models = context_with_comfy.base_dir / "models"
@@ -91,8 +91,8 @@ def test_migrate_empty_directory_tree_builds_symlink(context_with_comfy):
     result = task.execute(context_with_comfy)
 
     assert result == TaskResult.SUCCESS
-    assert comfy_models.is_symlink()
-    assert comfy_models.resolve() == target_models.resolve()
+    assert not comfy_models.is_symlink()
+    assert list(comfy_models.iterdir()) == []
 
 
 def test_setup_symlink_fails_when_physical_directory_still_has_data(context_with_comfy):
@@ -137,7 +137,9 @@ def test_orphan_check_preserves_conflicting_model(context_with_comfy):
     assert conflict.read_bytes() == b"source"
 
 
-def test_models_addon_propagates_task_failure(context_with_comfy):
-    with patch("src.addons.models.plugin.TaskRunner.run_tasks", return_value=False):
-        with pytest.raises(RuntimeError, match="Models setup failed"):
-            ModelAddon().setup(context_with_comfy)
+def test_models_addon_setup_does_not_migrate(context_with_comfy):
+    source = context_with_comfy.artifacts.comfy_dir / "models"
+    (source / "keep.bin").write_bytes(b"keep")
+    ModelAddon().setup(context_with_comfy)
+    assert (source / "keep.bin").read_bytes() == b"keep"
+    assert not source.is_symlink()

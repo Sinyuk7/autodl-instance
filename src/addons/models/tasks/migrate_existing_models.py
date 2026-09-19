@@ -2,7 +2,7 @@
 MigrateExistingModels Task - migrate existing model files.
 
 Move files from a physical `ComfyUI/models` directory into the persistent
-models directory on the data disk, then rebuild the symlink when it is safe.
+models directory on the data disk, leave link creation to init.
 """
 import filecmp
 from dataclasses import dataclass
@@ -122,7 +122,7 @@ class MigrateExistingModelsTask(BaseTask):
                 continue
 
             if item.is_dir():
-                if target.exists() and (target.is_symlink() or not target.is_dir()):
+                if (target.exists() or target.is_symlink()) and (target.is_symlink() or not target.is_dir()):
                     self._preserve_conflict(item, conflict)
                     stats.model_conflicts += 1
                     continue
@@ -174,12 +174,5 @@ class MigrateExistingModelsTask(BaseTask):
                 f"  -> 检测到 {stats.model_conflicts} 个冲突，目标文件保持不变，源文件已单独保留"
             )
 
-        comfy_models.rmdir()
-        logger.info(f"  -> 已迁移 {stats.migrated} 个文件，删除原目录")
-
-        try:
-            comfy_models.symlink_to(target_models)
-            return TaskResult.SUCCESS
-        except OSError as e:
-            logger.error(f"  -> [ERROR] 无法创建软链接: {e}")
-            return TaskResult.FAILED
+        logger.info(f"  -> 已迁移 {stats.migrated} 个文件；请执行 autodl init 建立链接")
+        return TaskResult.SUCCESS

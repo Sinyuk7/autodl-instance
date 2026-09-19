@@ -1,6 +1,6 @@
 # 主机交接
 
-当前工作：CLI 使用系统盘源码的 editable 安装；init 初始化路径与代理；setup 使用 /root/.venvs/comfyui 独立环境。依赖完全交给 comfy-cli / ComfyUI，不维护 Torch 或 CUDA 版本锁定。
+当前工作：CLI 使用系统盘源码的 editable 安装；init 每次开机准备目录、链接与代理；migrate 显式迁移已有数据且不建立链接；setup 仅安装程序和依赖，使用 /root/.venvs/comfyui 独立环境。依赖完全交给 comfy-cli / ComfyUI，不维护 Torch 或 CUDA 版本锁定。
 完整历史现场数据可能过期，每次操作以实测为准。
 
 已确认的设计：
@@ -33,7 +33,10 @@
 2. 用 findmnt -T、mountpoint、df -hT、df -i 重验两块存储及系统盘容量。
 3. 核对实际 GPU/驱动、ComfyUI 路径、Python 环境和监听进程。
 4. 独立 venv 由 setup 创建；不要在 base Conda 中安装依赖。
-5. 真实 setup 会安装 Torch/ComfyUI、迁移数据、初始化代理，不能用它探测状态。
+5. setup 仅安装程序和依赖，使用调用进程网络；init 会准备目录／链接并初始化代理，migrate 会搬迁数据。三者均不能用来探测状态。
 6. 真实下载、GPU 推理和公网映射必须分别验证。
 
 禁止打印秘密或未经要求 commit/push；镜像操作由用户在 AutoDL 控制台执行。
+
+- 本次职责拆分仅修改代码和文档并执行隔离测试；未执行主机 init/setup/migrate，现有数据布局和本机路径配置未修改。
+- 职责拆分后隔离测试 182 项通过；原子不覆盖迁移在临时目录验证，共享存储支持情况尚未实测，不支持时保留源文件并报错。

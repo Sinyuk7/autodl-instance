@@ -29,14 +29,20 @@ df -i /root /root/autodl-tmp /root/autodl-fs
 
 ```bash
 autodl secrets set mihomo-subscription-url  # 使用 Mihomo 时配置；交互输入
-autodl init       # 保存路径、创建数据目录、初始化代理
+autodl init       # 每次开机：检查挂载、创建缺失目录、建立安全链接、初始化代理
 autodl status     # 只读检查
-autodl setup      # 创建独立 Python 环境、安装 ComfyUI、迁移并连接数据目录
+autodl setup      # 新实例首次安装：仅安装程序和依赖
+autodl migrate    # 仅在已有实体目录需要搬迁时执行；保留冲突，不创建链接
+autodl init       # 安装／迁移后完成链接，日后每次开机执行
 autodl start      # 前台启动，监听 0.0.0.0:6006
 autodl stop       # 停止确认归属的 ComfyUI 和代理进程
 ```
 
-已有配置在重复 init 时保留，显式参数可覆盖。健康 Mihomo 会复用，无需向 shell 导出代理变量。setup 会安装依赖并迁移文件，执行前检查现有数据和磁盘空间。
+已有配置在重复 init 时保留，显式参数可覆盖；配置未变时不重写配置文件。健康 Mihomo 会复用。init 不搬迁或删除已有数据：正确链接跳过，缺失路径或空目录可建立链接，非空目录提示先执行 migrate，错误链接拒绝自动切换。ComfyUI 尚未安装时只准备存储目标，不创建源码目录。
+
+setup 不初始化代理、不迁移数据、不建立数据链接。init 的代理环境仅作用于自身进程；安装需要代理时可使用单命令环境，例如 `HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890 NO_PROXY=127.0.0.1,localhost autodl setup`（端口以实际配置为准）。
+
+migrate 只搬迁 ComfyUI 下实体 models/user/output 目录，保留目标已有文件；同内容源副本去重，不同内容源文件另存 `.autodl-model-conflicts` 或 `.autodl-migration-conflicts`，不会覆盖已有冲突副本。源目录保持为空，随后由 init 建立链接。错误链接不会由 migrate 自动切换。迁移发布使用 Linux 原子不覆盖操作；文件系统不支持时会报错并保留源文件。迁移期间停止对这些目录的写入；迁移不是跨目录事务，中断后可能已有部分文件搬迁，可修复原因后重试。
 
 首次安装使用最新版 comfy-cli 和 ComfyUI 最新稳定版，依赖跟随 ComfyUI 自己的 requirements.txt；项目不维护依赖版本锁定。无卡也可安装，GPU 推理需有卡后验证。
 

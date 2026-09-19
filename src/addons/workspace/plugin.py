@@ -5,11 +5,9 @@ involved.
 """
 import filecmp
 from pathlib import Path
-from typing import List, cast
 
 from src.core.file_migration import move_path_safely
-from src.core.interface import AppContext, BaseAddon, hookimpl
-from src.core.runtime import require_managed_storage_mount
+from src.core.interface import BaseAddon
 from src.core.utils import logger
 
 
@@ -72,44 +70,3 @@ class WorkspaceAddon(BaseAddon):
                     self._preserve_conflict(item, conflict)
             else:
                 move_path_safely(item, destination)
-
-    def _link(self, source: Path, target: Path) -> None:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if source.is_symlink():
-            if source.resolve() == target.resolve():
-                return
-            conflicts = target.parent / ".autodl-migration-conflicts" / target.name
-            self._preserve_conflict(source, conflicts / source.name)
-        elif source.is_dir():
-            conflicts = target.parent / ".autodl-migration-conflicts" / target.name
-            self._merge_directory(source, target, conflicts)
-            source.rmdir()
-        elif source.exists():
-            conflicts = target.parent / ".autodl-migration-conflicts" / target.name
-            self._preserve_conflict(source, conflicts / source.name)
-        target.mkdir(parents=True, exist_ok=True)
-        source.symlink_to(target)
-
-    @hookimpl
-    def setup(self, context: AppContext) -> None:
-        comfy_dir = context.artifacts.comfy_dir or context.comfy_dir
-        data_dir = context.workspace_data_dir or (context.base_dir / "comfyui-workspace")
-        output_dir = context.output_dir or (data_dir / "output")
-        require_managed_storage_mount(data_dir, output_dir)
-        data_dir.mkdir(parents=True, exist_ok=True)
-        manifest = self.get_manifest(context)
-        workspace_dirs = cast(List[str], manifest.get("workspace_dirs", ["user", "output"]))
-        for name in workspace_dirs:
-            target = output_dir if name == "output" else data_dir / name
-            self._link(comfy_dir / name, target)
-        context.artifacts.workspace_data_dir = data_dir
-        context.artifacts.output_dir = output_dir
-        logger.info("  -> 本地 workspace 已就绪: %s", data_dir)
-
-    @hookimpl
-    def start(self, context: AppContext) -> None:
-        return None
-
-    @hookimpl
-    def stop(self, context: AppContext) -> None:
-        return None

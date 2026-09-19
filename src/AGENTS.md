@@ -31,8 +31,7 @@ Hardcoded execution order (setup):
 
 1. `system` - tools and dedicated ComfyUI venv
 2. `comfy_core` - ComfyUI and Torch dependencies via comfy-cli
-3. `workspace` - Local persistent working data
-4. `models` - Model storage migration and layout
+Data directories and links belong to boot-time `init`; explicit `migrate` moves existing data and preserves conflicts. Neither is part of setup.
 
 ## CONVENTIONS
 
@@ -42,5 +41,5 @@ Hardcoded execution order (setup):
 - Plugin name = directory name (accessed via `self.name`)
 - Do not make inspection commands depend on a healthy lifecycle pipeline
 - comfy-cli owns Torch installation; installs must target the dedicated ComfyUI venv.
-- init initializes configuration and proxy; help and model inspection do not initialize networking.
+- init prepares directories/links and proxy on each boot; migrate explicitly moves existing data without linking; setup installs only programs and dependencies. Help and model inspection do not initialize networking.
 - No --until/--only lifecycle options.
