@@ -91,9 +91,14 @@ Core: `pluggy>=1.3.0`, `PyYAML>=6.0.1`, `rich>=13.0.0`, `prompt_toolkit>=3.0.0`
 ## NOTES
 
 - AutoDL source checkout belongs on the system disk at `/root/autodl-instance`.
-- `/root` survives normal shutdown but is cleared by system reset/image replacement; it is rebuildable, not a backup.
-- Data盘 is `/root/autodl-tmp`; verify it is a real mount before large writes. It survives system reset but is deleted with instance release and has no redundancy guarantee.
-- `/root/autodl-fs` is slower shared file storage suited to compressed backups, not active model or ComfyUI workloads.
+- `/root` is normally a 30GB system disk. Keep source, ComfyUI, Python environments, Codex, proxy software, and host configuration here so the environment can be saved as a private AutoDL image; keep models and large caches out.
+- Data盘 is `/root/autodl-tmp`, normally 50GB. Verify it is a real mount before writes. Use it for high-I/O working data, temporary output, caches, and selected active models; it is not included in system images and has no redundancy guarantee.
+- `/root/autodl-fs` is shared file storage with redundant copies and survives instance release. Use it as durable storage for important data, code backups, workflows, and the full model library. Its I/O is slower, so stage active data to the local data disk when useful.
+- Treat saved images as the user's private environment. Credentials may remain on the system disk with restrictive permissions; never share such an image without removing them first.
+- AutoDL cannot import an external custom image. Saving the full system disk as an AutoDL image is a control-plane action performed after shutdown; loading/replacing an image clears the system disk but leaves the local data disk unchanged.
+- AutoDL images can technically be shared, but sharing is not the default workflow. If explicitly requested, first remove subscription URLs, tokens, SSH private keys, Codex login data, and other machine secrets.
+- Saving an image captures only the system disk. Same-region instance cloning uses the system disk as its template and can optionally copy the local data disk. Shared file storage is mounted separately and is not part of either image.
+- Do not move plaintext secrets to the local data disk or shared file storage merely to keep them outside the image.
 - Ports 6006/6008 mapped to public by AutoDL
 - `uv` used for fast Python package management
 - `comfy-cli` manages ComfyUI installation
