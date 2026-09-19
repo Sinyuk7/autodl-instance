@@ -1,7 +1,10 @@
 """
 Torch engine addon for preparing a CUDA-capable PyTorch environment.
 """
+import os
+import shutil
 import sys
+from pathlib import Path
 from typing import List
 
 from src.addons.torch_engine.tasks import FixCudaDependencyChainTask
@@ -13,6 +16,16 @@ from src.core.utils import logger
 class TorchAddon(BaseAddon):
     module_dir = "torch_engine"
 
+    def _get_target_python(self) -> str:
+        """Return the host Python that uv installs packages into."""
+        conda_prefix = os.environ.get("CONDA_PREFIX")
+        if conda_prefix:
+            conda_python = Path(conda_prefix) / "bin" / "python3"
+            if conda_python.exists():
+                return str(conda_python)
+
+        return shutil.which("python3") or shutil.which("python") or sys.executable
+
     def get_tasks(self, phase: str) -> List[BaseTask]:
         """Return task hooks for the requested lifecycle phase."""
         if phase == "setup":
@@ -21,7 +34,7 @@ class TorchAddon(BaseAddon):
             ]
         return []
 
-    def _get_torch_cuda_info(self, ctx: AppContext) -> str:
+    def _get_torch_cuda_info(self, ctx: AppContext, python_executable: str) -> str:
         """Collect current torch/CUDA details for debug logging."""
         check_script = (
             "import sys\n"
@@ -37,12 +50,17 @@ class TorchAddon(BaseAddon):
             '    print(f"error={e}", end="")\n'
         )
         result = ctx.cmd.run(
-            [sys.executable, "-c", check_script],
+            [python_executable, "-c", check_script],
             check=False,
         )
         return result.stdout.strip() or result.stderr.strip()
 
-    def _is_torch_cuda_ready(self, ctx: AppContext, min_cuda_version: float) -> bool:
+    def _is_torch_cuda_ready(
+        self,
+        ctx: AppContext,
+        min_cuda_version: float,
+        python_executable: str,
+    ) -> bool:
         """Check whether torch is already installed with a sufficient CUDA runtime."""
         check_script = (
             "import sys\n"
@@ -57,7 +75,7 @@ class TorchAddon(BaseAddon):
             "    sys.exit(1)\n"
         )
         result = ctx.cmd.run(
-            [sys.executable, "-c", check_script],
+            [python_executable, "-c", check_script],
             check=False,
         )
         logger.debug(f"  -> [DEBUG] _is_torch_cuda_ready: returncode={result.returncode}")
@@ -81,8 +99,10 @@ class TorchAddon(BaseAddon):
         logger.info(f"  -> Driver >= {self.min_driver}, CUDA >= {self.min_cuda}")
         logger.info(f"  -> Using package index: {self.index_url}")
 
-        is_ready = self._is_torch_cuda_ready(ctx, self.min_cuda)
-        cuda_info = self._get_torch_cuda_info(ctx)
+        target_python = self._get_target_python()
+        logger.info(f"  -> Target Python: {target_python}")
+        is_ready = self._is_torch_cuda_ready(ctx, self.min_cuda, target_python)
+        cuda_info = self._get_torch_cuda_info(ctx, target_python)
         logger.debug(f"  -> [DEBUG] Torch readiness: is_ready={is_ready}, cuda_info={cuda_info}")
 
         if is_ready:
@@ -91,7 +111,7 @@ class TorchAddon(BaseAddon):
             return
 
         self._check_driver_version(ctx)
-        self._install_torch(ctx)
+        self._install_torch(ctx, target_python)
         ctx.artifacts.torch_installed = True
 
     def _check_driver_version(self, ctx: AppContext) -> None:
@@ -113,11 +133,11 @@ class TorchAddon(BaseAddon):
         except Exception as e:
             logger.warning(f"  -> [WARN] Driver validation failed, continuing: {e}")
 
-    def _install_torch(self, ctx: AppContext) -> None:
+    def _install_torch(self, ctx: AppContext, python_executable: str) -> None:
         """Install PyTorch from the configured CUDA wheel index."""
         logger.info("  -> Installing PyTorch with uv...")
 
-        cmd = ["uv", "pip", "install", "--system", "--upgrade"]
+        cmd = ["uv", "pip", "install", "--python", python_executable]
         cmd.extend(self.packages)
         cmd.extend(["--index-url", self.index_url])
 
