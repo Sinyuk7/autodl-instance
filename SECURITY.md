@@ -1,22 +1,8 @@
-# Security Policy
+# 安全
 
-## Supported Versions
+不要在 Issue、日志或 Git 中公开 Token、代理订阅、节点、私钥或用户工作流。
+漏洞优先通过仓库 Security 页的私密报告功能提交（若已启用），不要公开可利用的秘密。
 
-Currently, we only provide security updates for the latest version (or the latest commit on the `main` branch). If you are using an older version, we strongly recommend upgrading to the latest version to receive the latest security patches.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| Latest  | :white_check_mark: |
-| Older   | :x:                |
-
-## Reporting a Vulnerability
-
-We take the security of this project very seriously. If you discover any security vulnerability in this project, please **DO NOT** create a public GitHub Issue.
-
-Please report it to us using one of the following methods:
-
-1. **Email**: Send the vulnerability details to `[Your Email Address, e.g., security@example.com]`.
-2. **GitHub Private Vulnerability Reporting**: If enabled on this repository, please use the "Security Advisories" feature under the "Security" tab to report the vulnerability privately.
-
-**What to include in your report:**
-- The type of vulne
+本机秘密和代理配置留在系统盘，文件权限 600，目录权限 700。
+下载目标必须限制在配置的暂存根目录内。不得为释放端口终止未知进程。
+私人镜像可保留个人凭证；明确需要分享镜像时必须先清理秘密。

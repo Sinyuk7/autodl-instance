@@ -172,7 +172,7 @@ class Aria2Strategy(DownloadStrategy):
         no_proxy = os.environ.get("no_proxy") or os.environ.get("NO_PROXY")
         
         if proxy:
-            logger.info(f"  -> [aria2] 代理: {proxy}")
+            logger.info("  -> [aria2] 使用当前进程代理")
             if no_proxy:
                 logger.debug(f"  -> [aria2] 不代理: {no_proxy}")
         else:
@@ -250,7 +250,7 @@ class Aria2Strategy(DownloadStrategy):
             else:
                 logger.debug("  -> [aria2] HuggingFace Token 未配置，部分模型可能无法下载")
 
-        cmd.append(url)
+        cmd.extend(["--", url])
 
         logger.info(f"  -> [aria2] 启动 {self._connections} 线程下载...")
 
@@ -258,6 +258,10 @@ class Aria2Strategy(DownloadStrategy):
             process = subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr)
             process.wait()
             return process.returncode == 0 and target_path.exists()
+        except KeyboardInterrupt:
+            process.terminate()
+            process.wait()
+            raise
         except FileNotFoundError:
             logger.error("  -> [ERROR] aria2c 未安装，请运行: apt install aria2")
             return False

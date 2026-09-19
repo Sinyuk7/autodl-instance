@@ -1,117 +1,70 @@
 # autodl-instance
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+AutoDL 上的 ComfyUI 环境、代理和模型管理工具。
 
-面向 AutoDL + ComfyUI 的运维工具集和现场知识库。
+## 安装
 
-这个仓库不再被视为一个可以无条件接管整台实例的“一键安装器”。它保存可审查、可重复执行的诊断和修复工具，Codex CLI 则运行在目标 AutoDL 实例上，先观察真实环境，再维护这些工具。真实主机状态始终优先于文档中的默认假设。
-
-## 当前工作方式
-
-1. 将源码 clone 到 AutoDL 系统盘 `/root/autodl-instance`。
-2. 在主机上安装 Codex CLI，让它检查磁盘、GPU、Python、ComfyUI、Mihomo、端口和现有文件。
-3. 根据现场报告，分批修改并验证本仓库的诊断或修复逻辑。
-4. 按三层存储管理数据：系统镜像保存环境，本地数据盘承担高 IO 工作集，文件存储保存重要数据和完整模型库。
-
-第一轮不要直接运行完整 `setup`。先使用 [Codex AutoDL 首次现场检查](docs/CODEX_AUTODL_FIRST_TASK.md)，建立经过验证的环境基线，再决定要运行或修复哪些工具。
-
-Codex 的长期主机规则见 [AutoDL Codex 全局说明模板](docs/CODEX_AUTODL_HOST_AGENTS.md)。它说明三层存储、个人镜像、秘密、代理、进程和端口操作边界。
-
-## 项目边界
-
-仓库当前包含以下能力：
-
-- `autodl status` / `autodl doctor`：只读状态与环境诊断。
-- 网络工具：AutoDL 学术加速、Mihomo 进程与配置管理。
-- ComfyUI 生命周期工具：安装、启动、停止及数据目录连接。
-- PyTorch、节点和模型相关的安装或下载任务。
-- 面向真实 AutoDL 实例的测试、故障复现和运维文档。
-
-这些能力可以独立演进。现场排障不应被迫先运行整条安装流水线；任何安装或修复动作都应来自已确认的检查结果。
-
-## AutoDL 三层存储策略
-
-| 内容 | 默认路径 | 策略 |
-|------|----------|------|
-| 系统盘 | `/root`，默认 30GB | 保存源码、ComfyUI、Python 环境、Codex、代理程序和主机配置；控制容量，使整套环境可以保存为个人镜像 |
-| 本地数据盘 | `/root/autodl-tmp`，默认 50GB | 高 IO 工作集：当前任务输出、临时文件、缓存和少量当前使用模型；无冗余，不能保存进系统镜像 |
-| 文件存储 | `/root/autodl-fs` | 跨同地区实例共享、多副本、实例释放后仍保留；保存重要数据、代码备份、工作流和完整模型库，但 IO 性能一般 |
-
-源码工作副本仍放在 `/root/autodl-instance`，方便 Codex 直接维护；Git 远端保存代码副本。ComfyUI、Python 环境、Codex、Mihomo 和个人配置都放在系统盘，随个人镜像保存。
-
-AutoDL 当前不能导入外部自定义镜像。实例关机后，可以在控制台把整个系统盘保存为个人镜像，之后在新实例或现有实例中加载。更换镜像会清空当前系统盘，但不影响本地数据盘。默认把镜像当作私人环境，不对外分享；以后确实需要分享时，再清理订阅、Token、SSH 私钥和 Codex 登录信息。
-
-“保存镜像”和“迁移实例”不是同一操作：镜像只保存系统盘；同地区克隆实例会以系统盘为模板创建新实例，并可选择额外复制本地数据盘。文件存储不需要进入镜像或复制，它会挂载到同地区实例。切换显卡时，如果只是加载个人镜像，只恢复系统盘；如果使用同地区克隆并勾选数据盘，才会同时复制两块本地盘。
-
-默认 50GB 本地数据盘不足以长期保存完整模型库。文件存储应作为模型的可靠主库；运行时可把当前任务需要、且能够放下的模型复制或缓存到本地数据盘以获得更高 IO。若直接从文件存储读取模型，应接受启动和加载速度下降。也可以按 AutoDL 规则扩容本地数据盘，但扩容不改变其无冗余属性。
-
-写入前必须分别验证 `/root/autodl-tmp` 和 `/root/autodl-fs` 的真实挂载。系统重置只清空系统盘；实例释放会清除系统盘和本地数据盘，但不会删除独立的文件存储。连续关机达到平台释放周期时也必须提前处理本地数据。
-
-## 配置与秘密
-
-- 可公开、可复现的配置放在 Git。
-- 个人订阅、Token、SSH 私钥和 Codex 登录信息留在系统盘，文件权限设为 `600`，随个人镜像保存。
-- 不把明文秘密放进 Git、文件存储或本地数据盘。
-- 默认不分享个人镜像；确实要分享时先清理全部秘密。
-
-## 在 AutoDL 上准备工作副本
+在现有源码目录执行（需要 uv）：
 
 ```bash
-cd /root
-git clone https://github.com/Sinyuk7/autodl-instance.git
 cd /root/autodl-instance
-git status --short
-```
-
-安装 Codex CLI 时使用 OpenAI 官方安装器。若 Mihomo 已在 `127.0.0.1:7890` 提供服务，可只为该命令设置代理，不修改系统全局代理：
-
-```bash
-env HTTP_PROXY=http://127.0.0.1:7890 \
-    HTTPS_PROXY=http://127.0.0.1:7890 \
-    NO_PROXY=127.0.0.1,localhost \
-    sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh'
-```
-
-运行 Codex 时也可以采用同样的进程级代理。不要使用 `eval "$(autodl turbo)"` 作为启动 Mihomo 的必要步骤；该命令的用途是向当前 shell 导出网络变量，而不是单纯启动代理。
-
-## 现场诊断原则
-
-- 先读后写：先收集事实并报告，再进行安装、迁移或修复。
-- 不把配置文件存在等同于服务可用；必须检查进程、监听端口和真实请求。
-- 不把 `/root/autodl-tmp` 目录存在等同于数据盘已挂载。
-- 不通过 `fuser -k -9 6006/tcp` 杀死未知进程；只管理能够确认归属的服务 PID。
-- 不输出或提交 Mihomo 节点、订阅 URL、API token、SSH 私钥和 secrets。
-- 本地 `6006` 可用而公网为 AutoDL 通用 404 时，应分别记录 ComfyUI 监听状态与平台端口映射状态。
-
-## CLI 状态
-
-统一入口为 `autodl`：
-
-```bash
+uv tool install --editable --force .
 autodl --help
-autodl status
-autodl doctor
-autodl setup
-autodl start
-autodl stop
-autodl model --help
 ```
 
-当前源码仍处于整理期，不能假定所有命令均可运行。已知 `src/main.py` 引用了缺失的 `src/addons/torch_engine/plugin.py`，会阻塞部分命令与测试收集。第一次现场审计应记录该问题，但不应顺手扩展成全项目重构。
+CLI 直接使用当前源码。修改 Python 文件后立即生效；修改依赖后重新执行安装命令。
 
-## 开发顺序
+## 使用
 
-当前建议顺序是：
+先确认本地数据盘和文件存储已挂载：
 
-1. 真实 AutoDL 环境与目录审计。
-2. 根据审计结果修正文档、默认路径和只读诊断。
-3. 恢复基本测试收集与最小可运行入口。
-4. 分项修复安装、网络、进程和数据安全问题。
-5. 对极端故障、幂等性、恢复路径和 destructive behavior 做专项 review。
+```bash
+findmnt -T /root/autodl-tmp
+findmnt -T /root/autodl-fs
+mountpoint /root/autodl-tmp
+mountpoint /root/autodl-fs
+df -hT /root /root/autodl-tmp /root/autodl-fs
+df -i /root /root/autodl-tmp /root/autodl-fs
+```
 
-开发约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。历史设计和 review 材料位于 `docs/archive/`，它们不是当前行为的权威来源。
+```bash
+autodl secrets set mihomo-subscription-url  # 使用 Mihomo 时配置；交互输入
+autodl init       # 保存路径、创建数据目录、初始化代理
+autodl status     # 只读检查
+autodl setup      # 创建独立 Python 环境、安装 ComfyUI、迁移并连接数据目录
+autodl start      # 前台启动，监听 0.0.0.0:6006
+autodl stop       # 停止确认归属的 ComfyUI 和代理进程
+```
 
-## License
+已有配置在重复 init 时保留，显式参数可覆盖。健康 Mihomo 会复用，无需向 shell 导出代理变量。setup 会安装依赖并迁移文件，执行前检查现有数据和磁盘空间。
 
-[MIT License](LICENSE)
+首次安装使用最新版 comfy-cli 和 ComfyUI 最新稳定版，依赖跟随 ComfyUI 自己的 requirements.txt；项目不维护依赖版本锁定。无卡也可安装，GPU 推理需有卡后验证。
+
+## 模型
+
+```bash
+autodl secrets set hf-token               # 需要认证时设置
+autodl model download 'https://huggingface.co/组织/仓库/resolve/main/模型.safetensors'
+autodl model download --preset FLUX.2-klein-9B
+autodl model list
+```
+
+模型先下载到 downloads，完成后生成隐藏的 .meta 文件。确认文件后，将模型和 .meta 一起手动移入模型库；不会自动发布或更新 model-lock.yaml。HuggingFace 使用文件的 resolve 地址。
+
+## 默认路径
+
+| 内容 | 路径 |
+|------|------|
+| ComfyUI 源码 | /root/ComfyUI |
+| 独立 Python 环境 | /root/.venvs/comfyui |
+| 模型库 | /root/autodl-fs/ComfyUI/models |
+| 输出 | /root/autodl-fs/ComfyUI/output |
+| 下载暂存 | /root/autodl-tmp/ComfyUI/downloads |
+| 缓存 | /root/autodl-tmp/ComfyUI/cache |
+| 临时文件 | /root/autodl-tmp/ComfyUI/temp |
+| user 工作目录 | /root/autodl-tmp/comfyui-workspace/user |
+| 本机配置与代理 | ~/.config/autodl-instance/ |
+
+本地盘在实例释放后丢失，重要工作流需另存文件存储。秘密留在系统盘，代理配置使用 600 权限。旧本机配置可能覆盖默认路径，可用 `autodl config show` 检查。
+
+更多：[开发说明](CONTRIBUTING.md) · [实现逻辑](src/README.md) · [测试](tests/README.md) · [主机交接](docs/NEXT_SESSION_PLAN.md)

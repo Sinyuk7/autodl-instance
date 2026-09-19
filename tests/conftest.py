@@ -68,7 +68,8 @@ def app_context(
         state=mock_state,
         artifacts=Artifacts(),
         debug=True,
-        addon_manifests={},
+        python_env_dir=tmp_comfy_dir.parent / "venv",
+        addon_manifests=__import__("src.main", fromlist=["load_manifests"]).load_manifests(project_root),
     )
 
 
@@ -88,3 +89,24 @@ def context_with_comfy(app_context: AppContext, tmp_base_dir: Path) -> AppContex
     app_context.artifacts.user_dir = comfy_dir / "user"
     
     return app_context
+
+@pytest.fixture(autouse=True)
+def isolate_process_state(monkeypatch, tmp_path):
+    import os
+    from unittest.mock import patch
+    with patch.dict(os.environ, dict(os.environ), clear=True):
+        for key in list(os.environ):
+            if key.startswith("AUTODL_") or key in ("COMFYUI_MODELS_DIR", "CONDA_PREFIX", "VIRTUAL_ENV"):
+                os.environ.pop(key, None)
+        from src.core.runtime import DEFAULT_SECRETS_FILE
+        from src.lib.utils import load_yaml
+        with patch("src.core.runtime.load_local_secrets", side_effect=lambda path=DEFAULT_SECRETS_FILE: {} if path == DEFAULT_SECRETS_FILE else load_yaml(path)):
+            yield
+
+
+@pytest.fixture(autouse=True)
+def fake_venv_for_addon_tests(request, tmp_path):
+    if "app_context" in request.fixturenames:
+        ctx = request.getfixturevalue("app_context")
+        ctx.python_env_dir.mkdir(parents=True, exist_ok=True)
+        (ctx.python_env_dir / "pyvenv.cfg").write_text("include-system-site-packages = false")

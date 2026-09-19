@@ -48,7 +48,7 @@ tests/
 - One test file per addon
 
 **Integration Tests:**
-- Run full pipeline with `--until` to limit scope
+- Run full pipeline with mocked installers and temporary directories; no partial lifecycle options
 - Use temp directories (not real paths)
 - Mark slow tests with `@pytest.mark.slow`
 

@@ -30,7 +30,8 @@ class TestLoadManifests:
         manifests = load_manifests(real_project_root)
         
         # 验证加载了 addon manifests
-        assert "torch_engine" in manifests
+        assert "comfy_core" in manifests
+        assert "torch_engine" not in manifests
         assert "system" in manifests
         # 验证加载了 lib manifests
         assert "download" in manifests
@@ -98,6 +99,11 @@ class TestCreateContext:
             "workspace_dir": tmp_path / "workspace",
             "workspace_data_dir": tmp_path / "workspace-data",
             "models_dir": tmp_path / "models",
+            "output_dir": tmp_path / "output",
+            "downloads_dir": tmp_path / "downloads",
+            "cache_dir": tmp_path / "cache",
+            "temp_dir": tmp_path / "temp",
+            "python_env_dir": tmp_path / "venv",
             "comfy_dir": tmp_path / "ComfyUI",
             "config_file": tmp_path / "config.yaml",
             "local_config": {},
@@ -124,7 +130,7 @@ class TestCreateContext:
 
     def test_manifests_are_loaded(self, mock_file_state_manager, runtime_config):
         """addon_manifests 应已预加载"""
-        fake_manifests = {"torch_engine": {"key": "value"}}
+        fake_manifests = {"comfy_core": {"key": "value"}}
         with patch("src.main.resolve_runtime_config", return_value=runtime_config), \
              patch("src.main.load_manifests", return_value=fake_manifests):
             ctx = create_context()
@@ -139,6 +145,11 @@ class TestCreateContext:
             "workspace_dir": tmp_path / "workspace",
             "workspace_data_dir": tmp_path / "workspace-data",
             "models_dir": tmp_path / "models",
+            "output_dir": tmp_path / "output",
+            "downloads_dir": tmp_path / "downloads",
+            "cache_dir": tmp_path / "cache",
+            "temp_dir": tmp_path / "temp",
+            "python_env_dir": tmp_path / "venv",
             "comfy_dir": tmp_path / "ComfyUI",
             "config_file": tmp_path / "config.yaml",
             "local_config": {},
@@ -179,6 +190,11 @@ class TestMain:
             "workspace_dir": tmp_path / "workspace",
             "workspace_data_dir": tmp_path / "workspace-data",
             "models_dir": tmp_path / "models",
+            "output_dir": tmp_path / "output",
+            "downloads_dir": tmp_path / "downloads",
+            "cache_dir": tmp_path / "cache",
+            "temp_dir": tmp_path / "temp",
+            "python_env_dir": tmp_path / "venv",
             "comfy_dir": tmp_path / "ComfyUI",
             "config_file": tmp_path / "config.yaml",
             "local_config": {},
@@ -222,17 +238,13 @@ class TestMain:
         main()
         assert mock_dependencies["create_context"].call_args[1]["debug"] == expected
 
-    def test_until_parameter(self, mock_dependencies, monkeypatch):
-        """--until 参数正确传递"""
-        monkeypatch.setattr("sys.argv", ["main.py", "setup", "--until", "comfy_core"])
-        main()
-        assert mock_dependencies["execute"].call_args[1]["until"] == "comfy_core"
-
-    def test_only_parameter(self, mock_dependencies, monkeypatch):
-        """--only 参数正确传递"""
-        monkeypatch.setattr("sys.argv", ["main.py", "setup", "--only", "system"])
-        main()
-        assert mock_dependencies["execute"].call_args[1]["only"] == "system"
+    @pytest.mark.parametrize("flag", ["--until", "--only"])
+    def test_removed_flags_rejected(self, mock_dependencies, monkeypatch, flag):
+        monkeypatch.setattr("sys.argv", ["main.py", "setup", flag, "system"])
+        with pytest.raises(SystemExit) as error:
+            main()
+        assert error.value.code == 2
+        mock_dependencies["execute"].assert_not_called()
 
     def test_execution_order(self, monkeypatch):
         """初始化顺序: logger → network → context → execute"""
@@ -257,4 +269,4 @@ class TestMain:
             monkeypatch.setattr("sys.argv", ["main.py", "setup"])
             main()
         
-        assert call_order == ["logger", "network", "context", "execute"]
+        assert call_order == ["logger", "context", "network", "execute"]

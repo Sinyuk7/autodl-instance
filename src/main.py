@@ -6,14 +6,13 @@ import logging
 import sys
 from importlib import resources
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import yaml
 
 from src.addons.comfy_core.plugin import ComfyAddon
 from src.addons.models.plugin import ModelAddon
 from src.addons.system.plugin import SystemAddon
-from src.addons.torch_engine.plugin import TorchAddon
 from src.addons.workspace.plugin import WorkspaceAddon
 from src.core.adapters import FileStateManager, SubprocessRunner
 from src.core.artifacts import Artifacts
@@ -27,7 +26,7 @@ from src.core.runtime import (
     resolve_runtime_config,
 )
 from src.core.utils import logger, setup_logger
-from src.lib.network import invalidate_network_cache, setup_network, stop_proxy
+from src.lib.network import setup_network, stop_proxy
 
 # ============================================================
 # 全局常量
@@ -42,18 +41,16 @@ def create_pipeline() -> List[BaseAddon]:
     定义插件执行顺序（硬编码，显式声明）
     
     顺序说明：
-    1. system       - 基础设施（uv, comfy-cli, 缓存迁移）
-    2. torch_engine - PyTorch CUDA 环境
-    3. comfy_core   - ComfyUI 核心安装 → 产出 comfy_dir
-    4. workspace    - 本地工作数据持久化 → 依赖 comfy_dir
-    5. models       - 模型存储迁移与目录布局 → 依赖 comfy_dir
+    1. system       - uv 与独立 Python 环境
+    2. comfy_core   - comfy-cli 安装 ComfyUI 和 Python 依赖
+    3. workspace    - 本地工作数据持久化 → 依赖 comfy_dir
+    4. models       - 模型存储迁移与目录布局 → 依赖 comfy_dir
     
     注意: 代理服务（turbo / mihomo）在 setup_network() 中已初始化，
     不作为 pipeline 插件，因为所有插件都依赖网络。
     """
     return [
         SystemAddon(),
-        TorchAddon(),
         ComfyAddon(),
         WorkspaceAddon(),
         ModelAddon(),
@@ -87,7 +84,7 @@ def load_manifests(code_root: Path) -> Dict[str, Dict[str, Any]]:
         1. src/addons/*/manifest.yaml  - 插件配置
         2. src/lib/*/manifest.yaml     - 库配置
     
-    返回字典 key 为模块目录名，如 "torch_engine"、"download"。
+    返回字典 key 为模块目录名，如 "comfy_core"、"download"。
     """
     config_logger = logging.getLogger("autodl_setup")
     manifests: Dict[str, Dict[str, Any]] = {}
@@ -154,6 +151,7 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
         temp_dir=runtime.temp_dir,
         comfy_dir=runtime.comfy_dir,
         config_file=runtime.config_file,
+        python_env_dir=runtime.python_env_dir,
         local_config=runtime.local_config,
         cmd=SubprocessRunner(),
         state=FileStateManager(runtime.workspace_dir),
@@ -167,8 +165,6 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
 def execute(
     action: str, 
     context: AppContext, 
-    until: Optional[str] = None,
-    only: Optional[str] = None,
 ) -> PipelineResult:
     """
     执行插件 Pipeline
@@ -176,33 +172,9 @@ def execute(
     Args:
         action: 生命周期动作 (setup/start/stop)
         context: 应用上下文
-        until: 执行到指定插件为止（包含）
-        only: 只执行指定插件（跳过依赖，危险模式）
     """
     pipeline = create_pipeline()
     result = PipelineResult(action=action)
-    
-    # --only: 只执行单个插件
-    if only:
-        addon = next((a for a in pipeline if a.name == only), None)
-        if not addon:
-            logger.error(f"未知插件: {only}")
-            sys.exit(1)
-        
-        logger.info(f"\n>>> 单独执行: {addon.name}.{action}()")
-        method = getattr(addon, action, None)
-        if method:
-            try:
-                plugin_result = method(context)
-                if action == "stop" and isinstance(plugin_result, PluginResult):
-                    result.add_plugin_result(addon.name, plugin_result)
-            except Exception as e:
-                if action == "stop":
-                    logger.error(f"  -> [{addon.name}] stop 失败: {e}")
-                    result.add_failure(addon.name, str(e))
-                    return result
-                raise
-        return result
     
     # 正常顺序执行
     logger.info(f"\n>>> 开始执行 Pipeline: [{action.upper()}]")
@@ -222,10 +194,6 @@ def execute(
                     continue
                 raise
         
-        # --until: 执行到指定插件停止
-        if until and addon.name == until:
-            logger.info(f"  -> 已到达目标插件 [{until}]，停止")
-            break
     
     # setup 完成后持久化 artifacts，供后续 start/stop 使用
     if action == "setup":
@@ -235,7 +203,7 @@ def execute(
             context.artifacts.save(artifacts_dir)
             logger.info("  -> Artifacts 已持久化")
         except Exception as e:
-            logger.error(f"  -> Artifacts 持久化失败: {e}")
+            raise RuntimeError("Artifacts 持久化失败") from e
 
     return result
 
@@ -244,8 +212,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AutoDL 自动化装配调度器")
     parser.add_argument("action", choices=["setup", "start", "stop"], help="生命周期动作")
     parser.add_argument("--debug", action="store_true", help="调试模式")
-    parser.add_argument("--until", type=str, help="执行到指定插件为止")
-    parser.add_argument("--only", type=str, help="只执行指定插件（危险模式）")
     args = parser.parse_args()
 
     # 初始化日志（必须在所有其他操作之前）
@@ -255,18 +221,17 @@ def main() -> None:
     log_file = runtime.workspace_dir / "autodl-setup.log"
     setup_logger(log_file, debug=args.debug)
 
+    context = create_context(debug=args.debug, load_artifacts=args.action in ("start", "stop"))
+
     # Only mutating setup initializes networking. Read-only commands and stop
     # must never start a proxy merely to discover current state.
     if args.action == "setup":
-        invalidate_network_cache()
         setup_network()
 
     # 创建上下文并执行
     # start/stop 需要加载 setup 阶段持久化的 artifacts
-    load_artifacts = args.action in ("start", "stop")
-    context = create_context(debug=args.debug, load_artifacts=load_artifacts)
 
-    result = execute(args.action, context, until=args.until, only=args.only)
+    result = execute(args.action, context)
     if args.action == "stop":
         stop_proxy()
     if args.action == "stop" and not result.ok:

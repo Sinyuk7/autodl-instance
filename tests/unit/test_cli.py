@@ -33,13 +33,13 @@ def test_autodl_init_writes_global_config(tmp_path: Path):
     assert data["downloads_dir"] == str(local / "downloads")
     assert data["cache_dir"] == str(local / "cache")
     assert data["temp_dir"] == str(local / "temp")
-    invalidate.assert_called_once_with()
+    invalidate.assert_not_called()
     setup_network.assert_called_once_with(config_file=config)
 
 
 def test_autodl_setup_dispatches_lifecycle():
     with patch("src.main.main") as lifecycle:
-        main(["setup", "--debug", "--until", "workspace"])
+        main(["setup", "--debug"])
     lifecycle.assert_called_once()
 
 

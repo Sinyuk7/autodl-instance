@@ -31,9 +31,10 @@ def detect_url_type(url: str) -> str:
     Returns:
         "huggingface", "civitai", 或 "direct"
     """
-    if "huggingface.co" in url:
+    host = (urlparse(url).hostname or "").lower()
+    if host == "huggingface.co" or host.endswith(".huggingface.co"):
         return "huggingface"
-    elif "civitai.com" in url:
+    elif host == "civitai.com" or host.endswith(".civitai.com"):
         return "civitai"
     else:
         return "direct"

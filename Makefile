@@ -15,7 +15,7 @@ help:
 	@echo "  make lint           Run ruff check"
 	@echo "  make todo           List TODOs (exclude noise)"
 	@echo "  make release        Tag + push (after smoke)"
-	@echo "  make smoke          Local wheel install + verify"
+	@echo "  make smoke          Read-only CLI help checks"
 
 build:
 	$(HATCH) build
@@ -44,23 +44,9 @@ todo:
 	@echo "=== tests/ ==="
 	@grep -rn "TODO\|FIXME\|HACK\|XXX" tests/ --include="*.py" 2>/dev/null || echo "  (none)"
 
-smoke: build
-	@echo "=== Smoke: installing $(WHEEL) ==="
-	pip install $(WHEEL) --force-reinstall --no-deps
-	@echo ""
-	@echo "=== Smoke: autodl --help ==="
+smoke:
 	autodl --help
-	@echo ""
-	@echo "=== Smoke: autodl status ==="
-	-autodl status 2>/dev/null || echo "  (expected: no config yet)"
-	@echo ""
-	@echo "=== Smoke: autodl doctor ==="
-	-autodl doctor 2>/dev/null || echo "  (expected: no config yet)"
-	@echo ""
-	@echo "=== Smoke: uninstall ==="
-	pip uninstall autodl-instance -y
-	@echo ""
-	@echo "=== Smoke PASSED ==="
+	autodl model --help
 
 release: build
 	@test "$(VERSION)" != "0.0.0" || (echo "ERROR: cannot read version from pyproject.toml" && exit 1)

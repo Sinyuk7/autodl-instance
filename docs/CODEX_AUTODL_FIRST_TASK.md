@@ -2,7 +2,7 @@
 
 这份任务用于 Codex CLI 第一次进入真实 AutoDL 实例。目标是建立可信的环境基线，不是立即运行一键安装，也不是在没有证据时重构项目。
 
-主机级长期规则使用 [AutoDL Codex 全局说明模板](CODEX_AUTODL_HOST_AGENTS.md)。首次审计确认实际路径后，再把模板部署到 `/root/.codex/AGENTS.md`。
+主机级规则以用户提供的说明和 [项目规则](../AGENTS.md) 为准。
 
 ## 使用方式
 
@@ -44,10 +44,10 @@ env HTTP_PROXY=http://127.0.0.1:7890 \
 
 已知但必须重新验证的线索：
 - Mihomo v1.19.20 曾安装在 /usr/local/bin/mihomo，本地混合代理预期为 127.0.0.1:7890。
-- 用户上传的私密配置预期位于 /root/autodl-tmp/comfyui-workspace/mihomo/config.yaml。
+- 当前代理配置默认位于 ~/.config/autodl-instance/mihomo/config.yaml；历史数据盘配置可能仍存在，只检查元信息。
 - 先前代理初始化在下载 country.mmdb、geoip.dat、geosite.dat 时卡住并被中断。
 - ComfyUI 曾显示 “To see the GUI go to: http://127.0.0.1:6006”，但 AutoDL 的 6006 公网 HTTP 地址返回通用 404。
-- 仓库已知存在 src/main.py 导入缺失的 src/addons/torch_engine/plugin.py 的问题；本轮只记录影响，不修复。
+- Torch 插件已恢复；独立环境默认 /root/.venvs/comfyui，实际安装状态必须验证。
 
 请建立一个检查清单并依次完成：
 1. 基础身份：pwd、Git root/branch/HEAD/status、OS、内核、CPU、内存、时区；保留用户已有改动。

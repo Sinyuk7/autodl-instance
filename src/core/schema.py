@@ -21,9 +21,6 @@ class StateKey(str, Enum):
     SYSTEM_TOOLS_INSTALLED = "system_tools_installed"
     COMFY_CLI_INSTALLED = "comfy_cli_installed"
     
-    # TorchAddon
-    TORCH_INSTALLED = "torch_installed"
-    
     # ComfyAddon
     COMFY_INSTALLED = "comfy_core_installed"
     

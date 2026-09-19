@@ -72,12 +72,13 @@ class DownloadManager:
         """首次下载时懒加载安装依赖工具"""
         if self._initialized:
             return
-        self._initialized = True
 
         # 确保默认策略可用
         default_strategy = self._strategies.get(self._default_strategy_name)
         if default_strategy and not default_strategy.is_available():
-            default_strategy.ensure_available()
+            if not default_strategy.ensure_available():
+                raise RuntimeError("aria2 is unavailable")
+        self._initialized = True
 
     # ── 策略选择 ─────────────────────────────────────────────
 
@@ -121,7 +122,8 @@ class DownloadManager:
         Returns:
             True 成功，False 失败
         """
-        self._ensure_tools()
+        if not dry_run:
+            self._ensure_tools()
         strategy = self.get_strategy(url)
         logger.info(f"  -> 使用策略: {strategy.name}")
 

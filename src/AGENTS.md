@@ -29,11 +29,10 @@ src/
 
 Hardcoded execution order (setup):
 
-1. `system` - UV package manager, cache migration
-2. `torch_engine` - PyTorch CUDA setup
-3. `comfy_core` - ComfyUI installation
-4. `workspace` - Local persistent working data
-5. `models` - Model storage migration and layout
+1. `system` - tools and dedicated ComfyUI venv
+2. `comfy_core` - ComfyUI and Torch dependencies via comfy-cli
+3. `workspace` - Local persistent working data
+4. `models` - Model storage migration and layout
 
 ## CONVENTIONS
 
@@ -42,4 +41,6 @@ Hardcoded execution order (setup):
 - Implement only the `setup()`, `start()`, and `stop()` hooks the plugin owns
 - Plugin name = directory name (accessed via `self.name`)
 - Do not make inspection commands depend on a healthy lifecycle pipeline
-- The missing `addons/torch_engine/plugin.py` currently prevents lifecycle imports; preserve this as an explicit known failure until it is repaired and tested
+- comfy-cli owns Torch installation; installs must target the dedicated ComfyUI venv.
+- init initializes configuration and proxy; help and model inspection do not initialize networking.
+- No --until/--only lifecycle options.

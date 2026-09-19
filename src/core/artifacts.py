@@ -31,7 +31,7 @@ class Artifacts:
     # ==================== ComfyAddon ====================
     comfy_dir: Optional[Path] = None
     user_dir: Optional[Path] = None
-    output_dir: Optional[Path] = None  # ComfyUI 产出目录（tmp 盘软链接目标）
+    output_dir: Optional[Path] = None  # ComfyUI 输出目录（默认共享存储）
     
     # ==================== WorkspaceAddon ====================
     workspace_data_dir: Optional[Path] = None
@@ -44,10 +44,6 @@ class Artifacts:
     ssh_dir: Optional[Path] = None
     uv_bin: Optional[Path] = None
     
-    # ==================== TorchAddon ====================
-    torch_installed: bool = False
-    cuda_version: Optional[str] = None
-
     # ==================== Network/Proxy ====================
     proxy_url: Optional[str] = None          # http://127.0.0.1:7890
     proxy_api_url: Optional[str] = None      # http://127.0.0.1:9090

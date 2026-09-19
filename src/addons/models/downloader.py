@@ -20,6 +20,7 @@ from src.lib.download import (
 from src.lib.download.civitai import resolve_civitai_url
 from src.lib.download.preflight import PreflightResult, prepare_download_preflight
 from src.lib.download.url_utils import detect_url_type
+from src.lib.download.paths import safe_target
 from src.lib import ui
 from src.lib.utils import load_yaml, format_size
 
@@ -337,8 +338,8 @@ def cmd_download_interactive(url: str) -> None:
         custom = ui.prompt_input("子目录 (留空则直接放入类型目录)", default="")
         rel_dir = f"{base_dir}/{custom}" if custom else base_dir
     
-    target_dir = base / rel_dir
-    target_path = target_dir / filename
+    target_path = safe_target(base, str(Path(rel_dir) / filename))
+    target_dir = target_path.parent
     
     # ========== Step 5: 处理文件已存在 ==========
     if target_path.exists():
@@ -361,7 +362,9 @@ def cmd_download_interactive(url: str) -> None:
                 default=f"{stem}_new{suffix}"
             )
             filename = new_name
-            target_path = target_dir / filename
+            target_path = safe_target(base, str(Path(rel_dir) / filename))
+            if target_path.exists():
+                raise ValueError("Renamed target already exists")
         # choice == "覆盖" 则继续
     
     # ========== Step 6: 确认下载 ==========
@@ -452,11 +455,11 @@ def cmd_download_preset(preset_name: str) -> None:
     for entry in preset.models:
         name = entry.model
         rel_path = entry.primary_path
-        target = base / rel_path
-        published = models_base / rel_path
+        target = safe_target(base, rel_path)
+        published = safe_target(models_base, rel_path)
 
         # 正式目录或暂存目录中已有文件时均不重复下载。
-        if published.exists() or target.exists():
+        if (published.exists() and not Path(str(published) + ".aria2").exists()) or (target.exists() and not Path(str(target) + ".aria2").exists()):
             existing = published if published.exists() else target
             ui.print_info(f"[{name}] 已存在，跳过: {existing}")
             skip_count += 1
@@ -500,6 +503,8 @@ def cmd_download_preset(preset_name: str) -> None:
         f"成功: {success_count}\n失败: {fail_count}\n跳过: {skip_count}",
         style="green" if fail_count == 0 else "yellow"
     )
+    if fail_count:
+        sys.exit(1)
 
 
 # ============================================================
@@ -568,7 +573,6 @@ def cmd_cache_clear(force: bool = False) -> None:
 def main() -> None:
     # 初始化网络环境 (加载代理、镜像、API Token)
     # 注意：不要在模块 import 时执行，status/doctor 会复用本模块的只读 helper。
-    setup_network(verbose=True)
 
     parser = argparse.ArgumentParser(
         description="ComfyUI 模型管理器 (交互式)",
@@ -615,6 +619,16 @@ def main() -> None:
     cache_clear.add_argument("-f", "--force", action="store_true", help="跳过确认")
     
     args = parser.parse_args()
+    if args.cmd == "download" and not (args.url or args.preset):
+        parser.error("download requires URL or --preset")
+    if args.cmd == "download" or args.cmd == "cache":
+        from src.core.runtime import resolve_runtime_config, configure_cache_environment, require_managed_storage_mount
+        runtime = resolve_runtime_config(Path(__file__).resolve().parents[3])
+        configure_cache_environment(runtime)
+        if args.cmd == "download" or args.cache_cmd == "clear":
+            require_managed_storage_mount(runtime.downloads_dir, runtime.cache_dir)
+        if args.cmd == "download":
+            setup_network(verbose=True)
     
     if args.cmd == "list":
         cmd_list()

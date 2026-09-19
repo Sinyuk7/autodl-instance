@@ -28,13 +28,17 @@ class TestSetup:
         comfy_dir = app_context.comfy_dir
         assert app_context.artifacts.comfy_dir == comfy_dir
         assert app_context.artifacts.output_dir == app_context.workspace_data_dir / "output"
-        cli_install = mock_runner.assert_called_with("comfy-cli==1.20.0")
+        cli_install = mock_runner.assert_called_with("--upgrade comfy-cli")
         assert "--index-url https://pypi.org/simple" in cli_install.cmd
         install = mock_runner.assert_called_with("comfy --workspace")
         assert "--skip-prompt install" in install.cmd
-        assert "--version 0.36.0" in install.cmd
-        assert "--nvidia --cuda-version 13.0" in install.cmd
-        assert "--skip-torch-or-directml" in install.cmd
+        assert "--version latest" in install.cmd
+        assert "--nvidia" in install.cmd
+        assert "--cuda-version" not in install.cmd
+        assert "--skip-torch-or-directml" not in install.cmd
+        assert "--fast-deps" not in install.cmd
+        assert f"VIRTUAL_ENV={app_context.python_env_dir}" in install.cmd
+        assert "env -u CONDA_PREFIX" in install.cmd
         assert install.kwargs["capture_output"] is False
 
     def test_skip_when_already_installed(self, app_context: AppContext, mock_runner):
@@ -43,6 +47,7 @@ class TestSetup:
         uv_bin.touch()
         app_context.artifacts.uv_bin = uv_bin
         (app_context.comfy_dir / "main.py").touch()
+        (app_context.python_env_dir / ".comfy-ready").touch()
         app_context.state.mark_completed(StateKey.COMFY_INSTALLED)
 
         with patch("shutil.which", return_value="/usr/bin/comfy"):
@@ -53,6 +58,24 @@ class TestSetup:
         assert app_context.artifacts.comfy_dir == app_context.comfy_dir
         # 不应调用安装命令
         mock_runner.assert_not_called_with("comfy --workspace")
+        mock_runner.assert_not_called_with("--upgrade comfy-cli")
+
+    def test_failed_dependency_check_does_not_mark_ready(self, app_context, mock_runner):
+        uv_bin = app_context.base_dir / "uv"
+        uv_bin.touch()
+        app_context.artifacts.uv_bin = uv_bin
+        original_run = mock_runner.run
+
+        def run(cmd, **kwargs):
+            if "pip" in cmd and "check" in cmd:
+                raise RuntimeError("broken dependency")
+            return original_run(cmd, **kwargs)
+
+        with patch.object(mock_runner, "run", side_effect=run):
+            with pytest.raises(RuntimeError, match="broken dependency"):
+                ComfyAddon().setup(app_context)
+        assert not (app_context.python_env_dir / ".comfy-ready").exists()
+        assert not app_context.state.is_completed(StateKey.COMFY_INSTALLED)
 
     def test_raises_when_uv_missing(self, app_context: AppContext):
         """依赖缺失：uv 不可用时应报错"""

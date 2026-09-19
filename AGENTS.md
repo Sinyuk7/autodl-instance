@@ -10,7 +10,7 @@ Collection of inspectable diagnostics, installers, lifecycle helpers, and recove
 
 ## ACTIVE HOST HANDOFF
 
-After the pending AutoDL restart, read `docs/NEXT_SESSION_PLAN.md` before any
+Before host mutations, read `docs/NEXT_SESSION_PLAN.md` before any
 host mutation. Verify all mounts again and preserve the uncommitted working
 tree; do not run lifecycle setup/start/stop commands merely to probe state.
 
@@ -73,15 +73,16 @@ tree; do not run lifecycle setup/start/stop commands merely to probe state.
 
 ```bash
 # Initial setup (run once)
-./init.sh [--debug]
+autodl init
+autodl setup [--debug]
 # Or directly:
-python -m src.main setup [--debug] [--until PLUGIN] [--only PLUGIN]
+autodl setup [--debug]
 
 # Start ComfyUI
-python -m src.main start [--debug]
+autodl start [--debug]
 
 # Stop ComfyUI and owned helper processes
-python -m src.main stop [--debug]
+autodl stop [--debug]
 
 # Run tests
 pytest tests/ -v
@@ -111,4 +112,8 @@ Core: `pluggy>=1.3.0`, `PyYAML>=6.0.1`, `rich>=13.0.0`, `prompt_toolkit>=3.0.0`
 - Read-only inspection must not initialize networking or mutate host state.
 - Prefer direct Mihomo process management and per-command proxy variables; do not require global shell proxy injection.
 - Never print or commit proxy profiles, subscription URLs, tokens, private keys, or local secrets.
-- Known baseline defect: `src/addons/torch_engine/plugin.py` is missing while `src/main.py` imports it.
+- comfy-cli manages Torch and ComfyUI dependencies in `/root/.venvs/comfyui`; never fall back to base Conda or pin Torch independently.
+- CLI uses editable installation from `/root/autodl-instance`. No partial lifecycle flags or generated shell aliases.
+- `init` initializes configuration and networking; model help/list/status/types must remain read-only.
+- Output defaults to `/root/autodl-fs/ComfyUI/output`; downloads/cache/temp use `/root/autodl-tmp/ComfyUI`.
+- Proxy profiles belong in `~/.config/autodl-instance/mihomo` on the system disk.

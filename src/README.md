@@ -1,307 +1,42 @@
-# AutoDL Instance 项目架构分析（历史快照）
+# 实现逻辑
 
-> 本文包含早期 `sync`、Git 和 userdata 插件设计，与当前源码不完全一致，仅用于理解历史方向，不应作为运行或修改依据。当前入口、插件列表和约束请以源码、根目录 `README.md` 及各级 `AGENTS.md` 为准；待现场审计和基础修复完成后再重写本文。
+统一入口：src/cli.py 的 main，editable 安装提供 autodl 命令。
 
-## 一、整体架构概览
+## init
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              main.py (入口)                              │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  CLI: setup | start | sync                                        │   │
-│  │  ↓                                                                │   │
-│  │  create_context() → AppContext                                    │   │
-│  │  ↓                                                                │   │
-│  │  execute(action, context) → 顺序执行 Pipeline                      │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    ▼               ▼               ▼
-              ┌──────────┐   ┌──────────┐   ┌──────────┐
-              │  setup   │   │  start   │   │   sync   │
-              │ (初始化) │   │ (启动)   │   │ (同步)   │
-              └──────────┘   └──────────┘   └──────────┘
-                    │               │               │
-                    └───────────────┼───────────────┘
-                                    ▼
-        ┌──────────────────────────────────────────────────────────────┐
-        │                      Plugin Pipeline                          │
-        │  ┌────────┬────────┬────────┬────────┬────────┬────────┬────────┐
-        │  │ System │  Git   │ Torch  │ Comfy  │Userdata│ Nodes  │ Models │
-        │  │ Addon  │ Addon  │ Addon  │ Addon  │ Addon  │ Addon  │ Addon  │
-        │  └────────┴────────┴────────┴────────┴────────┴────────┴────────┘
-        │     ①        ②        ③        ④        ⑤        ⑥        ⑦    │
-        │                   (sync 动作按 ⑦→① 逆序执行)                     │
-        └──────────────────────────────────────────────────────────────┘
-```
+合并已有配置和显式参数，补齐默认路径，验证受管存储挂载，创建数据目录并保存配置。然后初始化网络：优先配置的 Mihomo，健康进程复用；无配置时尝试 AutoDL 学术加速，否则直连。配置失败不回滚已创建目录。
 
----
+Mihomo 配置固定在本机 config.yaml 同级的 mihomo 目录，默认 ~/.config/autodl-instance/mihomo。历史数据盘代理配置不会自动迁移，也不会自动停止不属于新配置的进程。
 
-## 二、三个核心命令
+## setup
 
-| 命令 | 作用 | 执行顺序 | Artifacts |
-|------|------|----------|-----------|
-| **`setup`** | 初始化整个环境（安装工具、ComfyUI、配置软链接等） | 顺序执行 ①→⑦ | **写入**并持久化到 `.artifacts.json` |
-| **`start`** | 启动 ComfyUI 服务 | 顺序执行 ①→⑦ | **读取**已持久化的 artifacts |
-| **`sync`** | 同步状态到 Git，生成 model-lock.yaml | **逆序**执行 ⑦→① | **读取**已持久化的 artifacts |
+先构造上下文和验证挂载，再初始化网络并顺序执行：
 
-### 命令执行流程
+1. system：系统工具、uv、独立 venv。复用可用 uv，不写 shell 配置。
+2. comfy_core：在同一 venv 安装最新版 comfy-cli，用常规安装流程安装 ComfyUI 最新稳定版及其依赖。不维护依赖清单或版本锁定，不使用 fast-deps 或本机版本快照约束解析。依赖由 comfy-cli 和 ComfyUI requirements.txt 决定，安装后仅检查依赖一致性与 Torch 导入。环境内完成标记和现有 main.py 共同决定是否跳过；重复 setup 不自动升级已完成的 ComfyUI。
+3. workspace：迁移 user/output 并创建软链接，同名冲突保留。
+4. models：迁移模型并连接 models_dir，错误软链接或普通文件拒绝覆盖。
 
-```python
-# main.py 核心逻辑
-def main():
-    # 1. setup 时清除网络缓存，确保走完整初始化
-    if action == "setup":
-        invalidate_network_cache()
-    
-    # 2. 初始化网络环境（代理 + 镜像 + Token）
-    setup_network()
-    
-    # 3. 创建上下文（start/stop 需加载已持久化的 artifacts）
-    load_artifacts = action in ("start", "stop")
-    context = create_context(debug, load_artifacts)
-    
-    # 4. 执行 Pipeline
-    execute(action, context)
-```
+GPU 类型仅指定 NVIDIA，CUDA wheel 选择交给 comfy-cli，不在项目内固定。安装不以 GPU 可用为前提，不修改驱动或基础 Conda；GPU 推理需另行验证。
 
----
+任何 setup 异常停止后续步骤，成功保存 artifacts。仅支持完整 setup/start/stop，不提供跳过依赖的局部执行参数。
 
-## 三、插件系统架构
+## start / stop
 
-### 3.1 核心组件关系
+start 用专用 venv 中的 comfy 启动，监听 0.0.0.0:6006，使用配置的 temp_dir。端口占用时报错，不杀未知进程。
+stop 收集插件失败，再停止确认归属的代理；SIGTERM 超时报告失败，不自动 SIGKILL。
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         AppContext                               │
-│  ┌─────────────┬───────────────┬─────────────┬─────────────────┐ │
-│  │ project_root│   base_dir    │  comfy_dir  │ addon_manifests │ │
-│  │  (项目根)   │ (数据盘/tmp)  │ (系统盘)    │   (预加载配置)  │ │
-│  ├─────────────┼───────────────┼─────────────┼─────────────────┤ │
-│  │ cmd: ICommandRunner         │ state: IStateManager           │ │
-│  │ (命令执行)                  │ (状态持久化)                   │ │
-│  ├─────────────────────────────┴─────────────────────────────────┤ │
-│  │               artifacts: Artifacts (强类型 DTO)               │ │
-│  │  ┌─────────────────────────────────────────────────────────┐  │ │
-│  │  │ comfy_dir | user_dir | models_dir | proxy_url          │  │ │
-│  │  │ uv_bin    | torch_installed  | cuda_version | ...       │  │ │
-│  │  └─────────────────────────────────────────────────────────┘  │ │
-│  └───────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    │ 注入到每个插件
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │          BaseAddon            │
-                    │  ┌─────────────────────────┐  │
-                    │  │ module_dir = "xxx"      │  │
-                    │  │ name → module_dir       │  │
-                    │  ├─────────────────────────┤  │
-                    │  │ @hookimpl setup()       │  │
-                    │  │ @hookimpl start()       │  │
-                    │  │ @hookimpl sync()        │  │
-                    │  └─────────────────────────┘  │
-                    └───────────────────────────────┘
-```
+## download
 
-### 3.2 依赖注入与端口隔离
+autodl model download URL 交互选择文件名和相对目录；--preset 从 models/manifest.yaml 顺序下载。
+所有目标必须位于 downloads_dir 内，拒绝绝对路径、.. 和越界软链接。已有未完成文件可续传。
+先估算远端大小检查空间，大小未知会明确提示并继续；aria2 负责下载，缺失时尝试安装。
+成功写隐藏 .meta，不自动复制到 models_dir、不更新 lock。批量存在失败则返回非零退出码。
+帮助、list/status/types/cache list 不初始化网络；cache clear 只删除带 .aria2 的未完成文件。
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Ports (接口)                              │
-│  ┌────────────────────────┐  ┌────────────────────────┐          │
-│  │     ICommandRunner     │  │     IStateManager      │          │
-│  │  ─────────────────────│  │  ─────────────────────│          │
-│  │  run(cmd, ...)        │  │  is_completed(key)    │          │
-│  │  run_realtime(cmd)    │  │  mark_completed(key)  │          │
-│  └───────────┬────────────┘  └───────────┬────────────┘          │
-└──────────────┼───────────────────────────┼───────────────────────┘
-               │                           │
-               ▼                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                       Adapters (实现)                             │
-│  ┌────────────────────────┐  ┌────────────────────────┐          │
-│  │   SubprocessRunner     │  │   FileStateManager     │          │
-│  │  (subprocess.run)      │  │  (YAML 文件存储)       │          │
-│  └────────────────────────┘  └────────────────────────┘          │
-└──────────────────────────────────────────────────────────────────┘
-```
+## 配置
 
-### 3.3 插件执行流程
-
-```python
-def execute(action, context, until, only):
-    pipeline = create_pipeline()  # [System, Git, Torch, Comfy, Userdata, Nodes, Model]
-    
-    # sync 逆序执行
-    if action == "sync":
-        pipeline = list(reversed(pipeline))
-    
-    # 顺序执行每个插件的对应钩子
-    for addon in pipeline:
-        method = getattr(addon, action, None)  # setup/start/sync
-        if method:
-            method(context)
-        
-        if until and addon.name == until:
-            break
-    
-    # setup 完成后持久化 artifacts
-    if action == "setup":
-        context.artifacts.save(context.project_root)
-```
-
----
-
-## 四、插件依赖关系图
-
-```
-                          ┌──────────────┐
-                          │ SystemAddon  │ ① 基础设施
-                          │ (uv, 缓存)   │
-                          └──────┬───────┘
-                                 │ artifacts.uv_bin
-                                 ▼
-                          ┌──────────────┐
-                          │  GitAddon    │ ② Git/SSH 配置
-                          └──────┬───────┘
-                                 │
-                                 ▼
-                          ┌──────────────┐
-                          │ TorchAddon   │ ③ PyTorch CUDA
-                          └──────┬───────┘
-                                 │ artifacts.torch_installed
-                                 ▼
-                          ┌──────────────┐
-                          │ ComfyAddon   │ ④ ComfyUI 核心
-                          │              │   ← 依赖 uv_bin
-                          └──────┬───────┘
-                                 │ artifacts.comfy_dir
-                                 │ artifacts.user_dir
-                         ┌───────┴────────┐
-                         ▼                ▼
-                ┌──────────────┐ ┌──────────────┐
-                │WorkspaceAddon│ │ ModelAddon   │
-                │⑤ 数据迁移    │ │⑥ 模型布局    │
-                └──────────────┘ └──────────────┘
-```
-
----
-
-## 五、设计亮点
-
-### 5.1 强类型 Artifacts（跨进程共享）
-
-```python
-@dataclass
-class Artifacts:
-    """插件间共享的强类型数据容器"""
-    
-    # 每个插件的输出都有明确类型
-    comfy_dir: Optional[Path] = None
-    uv_bin: Optional[Path] = None
-    torch_installed: bool = False
-    
-    # 支持持久化（setup → start → sync 跨进程）
-    def save(self, project_root: Path) -> None: ...
-    def load(cls, project_root: Path) -> "Artifacts": ...
-```
-
-**优势**：
-- 编译时类型检查
-- IDE 自动补全
-- 强制声明插件的输入/输出契约
-
-### 5.2 幂等性保障
-
-```python
-# 每个插件的 setup() 都通过 StateManager 保证幂等
-if ctx.state.is_completed(StateKey.COMFY_INSTALLED):
-    logger.info("  -> [SKIP] 已完成")
-    return
-
-# ... 执行安装逻辑 ...
-
-ctx.state.mark_completed(StateKey.COMFY_INSTALLED)
-```
-
-### 5.3 端口/适配器模式（依赖倒置）
-
-```python
-# 接口定义（ports.py）
-class ICommandRunner(ABC):
-    @abstractmethod
-    def run(self, cmd, ...) -> CommandResult: ...
-
-# 实现（adapters.py）
-class SubprocessRunner(ICommandRunner):
-    def run(self, cmd, ...):
-        return subprocess.run(...)
-
-# 注入使用（插件中）
-ctx.cmd.run(["comfy", "install"], check=True)
-```
-
-**优势**：便于测试（可 Mock），便于替换实现。
-
-### 5.4 显式 Pipeline（无隐式依赖）
-
-```python
-# main.py:create_pipeline()
-# 顺序硬编码，依赖关系一目了然
-return [
-    SystemAddon(),    # ① 无依赖
-    GitAddon(),       # ② 无依赖
-    TorchAddon(),     # ③ 无依赖
-    ComfyAddon(),     # ④ 依赖 ① (uv_bin)
-    WorkspaceAddon(), # ⑤ 依赖 ④ (comfy_dir)
-    ModelAddon(),     # ⑥ 依赖 ④ (comfy_dir)
-]
-```
-
----
-
-## 六、目录结构总结
-
-```
-src/
-├── main.py                 # 入口 & 生命周期调度
-├── core/                   # 核心抽象层
-│   ├── interface.py        # AppContext, BaseAddon, hookimpl
-│   ├── artifacts.py        # 跨插件共享的强类型 DTO
-│   ├── schema.py           # StateKey, EnvKey 枚举
-│   ├── ports.py            # 接口：ICommandRunner, IStateManager
-│   └── adapters.py         # 实现：SubprocessRunner, FileStateManager
-├── addons/                 # 插件模块
-│   ├── system/             # ① UV, 缓存迁移
-│   ├── git_config/         # ② Git/SSH 配置
-│   ├── torch_engine/       # ③ PyTorch CUDA
-│   ├── comfy_core/         # ④ ComfyUI 核心安装
-│   ├── workspace/          # ⑤ 用户数据迁移与软链接
-│   └── models/             # ⑥ 模型目录管理
-└── lib/                    # 可复用库
-    ├── download/           # 策略模式下载器
-    ├── network/            # 代理 & 镜像管理
-    └── utils.py            # 通用工具函数
-```
-
----
-
-## 七、设计模式总结
-
-| 模式 | 应用位置 | 说明 |
-|------|----------|------|
-| **插件模式 (pluggy)** | `BaseAddon` + `@hookimpl` | 可扩展的插件架构 |
-| **端口-适配器模式** | `ICommandRunner` / `IStateManager` | 依赖倒置，便于测试 |
-| **组合根模式** | `AppContext` | 所有依赖在入口组装 |
-| **策略模式** | `lib/download/` | 多种下载策略可切换 |
-| **DTO 模式** | `Artifacts` | 强类型跨进程数据共享 |
-| **幂等设计** | `StateManager` + `StateKey` | 重复执行安全 |
-
----
-
-这是一个设计良好的 **插件化编排系统**，核心思想是：
-1. **显式优于隐式** — Pipeline 顺序硬编码，依赖关系清晰
-2. **强类型契约** — Artifacts 强制声明插件的输入输出
-3. **关注点分离** — core（抽象）/ addons（插件）/ lib（复用库）职责明确
+runtime.py 解析路径，环境变量覆盖本机配置，本机配置覆盖默认值（python_env_dir 通过本机配置指定）。
+ComfyUI 环境默认 /root/.venvs/comfyui，必须位于系统盘，拒绝覆盖非 venv 目录。
+默认 output_dir 为 /root/autodl-fs/ComfyUI/output；downloads/cache/temp 为 /root/autodl-tmp/ComfyUI 下同名目录。
+安装成功不等于 GPU 推理已验证，真实 GPU、联网、模型加载和 AutoDL 公网映射需另行验证。

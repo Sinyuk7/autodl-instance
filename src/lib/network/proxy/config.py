@@ -7,6 +7,7 @@ mihomo 订阅配置管理
 - 预下载 GeoIP/GeoSite 数据库 (避免 mihomo 启动时因网络问题下载失败)
 """
 import logging
+import os
 import shutil
 import subprocess
 import urllib.request
@@ -41,6 +42,9 @@ def _download_with_curl(url: str, dest: Path, ua: str = _DEFAULT_UA) -> bool:
         return False
 
     try:
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.close(fd)
+        dest.chmod(0o600)
         result = subprocess.run(
             [
                 "curl", "-sSL",          # silent, show errors, follow redirects
@@ -55,7 +59,7 @@ def _download_with_curl(url: str, dest: Path, ua: str = _DEFAULT_UA) -> bool:
         )
 
         if result.returncode != 0:
-            logger.debug(f"  -> curl 下载失败 (code={result.returncode}): {result.stderr.strip()}")
+            logger.debug(f"  -> curl 下载失败 (code={result.returncode})")
             dest.unlink(missing_ok=True)
             return False
 
@@ -82,7 +86,7 @@ def _download_with_curl(url: str, dest: Path, ua: str = _DEFAULT_UA) -> bool:
         return True
 
     except Exception as e:
-        logger.debug(f"  -> curl 异常: {e}")
+        logger.debug("  -> curl 下载异常")
         dest.unlink(missing_ok=True)
         return False
 
@@ -105,6 +109,7 @@ def download_subscription(config: ProxyConfig, config_file: Path) -> bool:
     """
     url = config.subscription_url
     config_file.parent.mkdir(parents=True, exist_ok=True)
+    config_file.parent.chmod(0o700)
 
     # ── 手动上传模式：subscription_url 为空时使用已有配置 ──
     if not url:
@@ -242,6 +247,8 @@ def patch_config(config: ProxyConfig, config_file: Path) -> None:
 
         with open(config_file, "w", encoding="utf-8") as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+
+        config_file.chmod(0o600)
 
         # 预下载 GeoIP 数据库，避免 mihomo 启动时下载失败
         _ensure_geodata(config.config_dir)

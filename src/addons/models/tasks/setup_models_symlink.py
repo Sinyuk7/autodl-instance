@@ -48,8 +48,8 @@ class SetupModelsSymlinkTask(BaseTask):
             comfy_models.rmdir()
             logger.info("  -> 已删除空 models 物理目录")
         elif comfy_models.exists():
-            logger.warning("  -> [WARN] models 路径是文件，删除...")
-            comfy_models.unlink()
+            logger.error("models path is a file; refusing to delete user data")
+            return False
 
         try:
             comfy_models.symlink_to(target_models)

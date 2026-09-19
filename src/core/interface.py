@@ -57,6 +57,7 @@ class AppContext:
     cache_dir: Optional[Path] = None
     temp_dir: Optional[Path] = None
     config_file: Optional[Path] = None
+    python_env_dir: Path = Path('/root/.venvs/comfyui')
     local_config: Dict[str, Any] = field(default_factory=lambda: {})
 
     def __post_init__(self) -> None:

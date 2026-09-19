@@ -7,7 +7,6 @@
 ```
 addons/
 ├── system/          # System tools and package tooling
-├── torch_engine/    # PyTorch CUDA tasks; plugin.py is currently missing
 ├── comfy_core/      # ComfyUI core lifecycle
 ├── workspace/       # Persistent user/output directory links
 └── models/          # Model layout and management
@@ -38,11 +37,11 @@ class MyAddon(BaseAddon):
 
 | Task | Location |
 |------|----------|
-| Install system tools | `system/plugin.py` - UV, comfy-cli, cache links |
-| PyTorch setup | `torch_engine/manifest.yaml` and `torch_engine/tasks/`; the plugin entry point must be restored before use |
+| Install system tools | `system/plugin.py` - uv and dedicated venv |
+| PyTorch setup | `comfy_core/plugin.py`; comfy-cli manages dependencies in the dedicated venv |
 | ComfyUI install | `comfy_core/plugin.py` - Uses `comfy-cli` |
 | Persistent workspace links | `workspace/plugin.py` - Connect system-disk ComfyUI to data-disk state |
-| Model downloads | `models/plugin.py` - HuggingFace/CivitAI handlers |
+| Model downloads | `models/downloader.py` - staging via aria2 |
 
 ## CONVENTIONS
 
@@ -57,7 +56,7 @@ class MyAddon(BaseAddon):
 **State Management:**
 - Always check `ctx.state.is_completed(StateKey.X)` before work
 - Mark completion with `ctx.state.mark_completed(StateKey.X)`
-- State persists across runs in `BASE_DIR/.state/`
+- State persists in `workspace_dir/.autodl_state/`; Comfy readiness is also bound to its venv
 
 **Artifacts (cross-plugin data):**
 - Write: `ctx.artifacts.my_field = value`

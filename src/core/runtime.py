@@ -42,6 +42,7 @@ CONFIG_KEY_ALIASES = {
     "downloads-dir": "downloads_dir",
     "cache-dir": "cache_dir",
     "temp-dir": "temp_dir",
+    "python-env-dir": "python_env_dir",
 }
 
 SECRET_KEY_ALIASES = {
@@ -69,6 +70,7 @@ class RuntimeConfig:
     secrets_file: Path
     local_config: Dict[str, Any]
     local_secrets: Dict[str, Any]
+    python_env_dir: Path = Path('/root/.venvs/comfyui')
 
 
 def require_managed_storage_mount(*paths: Path) -> None:
@@ -79,7 +81,7 @@ def require_managed_storage_mount(*paths: Path) -> None:
             root = configured_root.resolve()
             if resolved_path != root and root not in resolved_path.parents:
                 continue
-            if not configured_root.is_mount():
+            if not root.is_mount():
                 raise RuntimeError(
                     f"AutoDL storage is not mounted: {configured_root}; "
                     f"refusing to write {resolved_path}"
@@ -115,7 +117,7 @@ def get_tool_version() -> str:
 def _expand_path(value: Any) -> Optional[Path]:
     if value in (None, ""):
         return None
-    return Path(os.path.expandvars(os.path.expanduser(str(value)))).resolve()
+    return Path(os.path.abspath(os.path.expandvars(os.path.expanduser(str(value)))))
 
 
 def normalize_config_key(key: str) -> str:
@@ -209,4 +211,5 @@ def resolve_runtime_config(
         secrets_file=secrets_file,
         local_config=config,
         local_secrets=secrets,
+        python_env_dir=_expand_path(config.get('python_env_dir')) or Path('/root/.venvs/comfyui'),
     )

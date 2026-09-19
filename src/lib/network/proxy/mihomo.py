@@ -113,7 +113,8 @@ class MihomoBackend(ProxyBackend):
         # 如果已经在运行，先停止
         if self.is_running():
             logger.info("  -> mihomo 已在运行，正在重启...")
-            self.stop()
+            if not self.stop():
+                return False
             _wait_port_free(self.config.proxy_port, timeout=5)
 
         logger.info("  -> 正在启动 mihomo...")
@@ -200,11 +201,8 @@ class MihomoBackend(ProxyBackend):
                 except ProcessLookupError:
                     break
             else:
-                logger.warning(f"  -> [WARN] mihomo (PID: {pid}) SIGTERM 超时，强制 SIGKILL")
-                try:
-                    os.kill(pid, _SIGKILL)
-                except ProcessLookupError:
-                    pass
+                logger.error("mihomo SIGTERM timed out; refusing automatic SIGKILL")
+                return False
 
             self._pid_file.unlink(missing_ok=True)
             logger.info(f"  -> ✓ mihomo 已停止 (PID: {pid})")

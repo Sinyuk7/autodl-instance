@@ -104,6 +104,7 @@ def integration_context(
         cmd=integration_runner,
         state=integration_state,
         artifacts=Artifacts(),
+        python_env_dir=integration_comfy_dir.parent / "venv",
         debug=True,
         addon_manifests=load_manifests(integration_project_root),
     )
@@ -135,4 +136,6 @@ def context_with_home(
     # Mock Path.home()
     monkeypatch.setattr(Path, "home", lambda: fake_home)
     
+    integration_context.python_env_dir.mkdir()
+    (integration_context.python_env_dir / "pyvenv.cfg").touch()
     return integration_context

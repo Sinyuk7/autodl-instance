@@ -5,12 +5,12 @@ NetworkManager - 网络环境核心编排器
 
 代理策略:
   1. 如果配置了 mihomo（autodl secrets 有 mihomo_subscription_url，
-     或 workspace/mihomo/ 有手动上传的配置）→ 启动 mihomo
+     或 ~/.config/autodl-instance/mihomo/ 有手动上传的配置）→ 启动 mihomo
   2. 否则 fallback 到 AutoDL 学术加速（/etc/network_turbo）
   3. 都没有 → 无代理模式
 
 配置持久化:
-  mihomo 配置通过本地 workspace/mihomo/ 目录持久化到数据盘。
+  mihomo 配置通过本地 ~/.config/autodl-instance/mihomo/ 目录持久化到数据盘。
 """
 import logging
 import os
@@ -25,12 +25,10 @@ from src.lib.network.mirror import load_hf_mirror
 from src.lib.network.token import load_api_tokens
 from src.lib.network.proxy import ProxyConfig, MihomoBackend
 from src.lib.network.state import (
-    get_cached_network_decision,
     cache_network_decision,
     is_subscription_recently_failed,
     mark_subscription_failed,
     mark_subscription_success,
-    invalidate_cache,
 )
 from src.core.runtime import DEFAULT_CONFIG_FILE, load_local_secrets, resolve_runtime_config
 
@@ -55,8 +53,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 def _get_workspace_mihomo_dir(config_file: Path = DEFAULT_CONFIG_FILE) -> Path:
     """获取 mihomo 本地 workspace 持久化目录"""
-    code_root = Path(__file__).resolve().parent.parent.parent.parent
-    return resolve_runtime_config(code_root, config_file=config_file).workspace_data_dir / _WORKSPACE_MIHOMO_DIR
+    return config_file.parent / _WORKSPACE_MIHOMO_DIR
 
 
 def _get_local_secrets(config_file: Path = DEFAULT_CONFIG_FILE) -> Dict[str, Any]:
@@ -152,41 +149,34 @@ class NetworkManager:
         self._initialized = True
 
     def _setup_proxy(self, verbose: bool) -> None:
-        """代理初始化 (带状态缓存加速)
-
-        策略:
-          1. 快速路径: 检查跨进程缓存，如果上次决策仍有效则直接复用
-          2. 有 mihomo 配置 → 先用 turbo 引导下载，再切到 mihomo
-          3. 没有 mihomo 配置 → 直接用 turbo 兜底
-
-        配置始终直接位于 workspace/mihomo；不复制或备份代理配置。
-        """
-        # ── 快速路径: 尝试复用上次的网络决策 ──
-        if self._try_fast_path(verbose):
-            return
-
+        """Reuse a healthy owned proxy; otherwise initialize the configured backend."""
         config = _build_proxy_config(self._config_file)
 
         if config is None:
             # 没有配置 mihomo，用 turbo 兜底
             load_autodl_turbo(verbose)
-            cache_network_decision("turbo")
+            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
             return
 
         if verbose:
             logger.info("  -> 检测到 mihomo 代理配置，准备启动...")
 
-        # 先加载 turbo 作为引导网络（下载 mihomo 内核和订阅需要网络）
-        load_autodl_turbo(verbose=False)
-
         backend = MihomoBackend(config)
+
+        if backend.is_running() and backend.health_check():
+            _inject_proxy_env(config.proxy_url)
+            self._backend = backend
+            cache_network_decision("mihomo")
+            return
+
+        load_autodl_turbo(verbose=False)
 
         # 安装内核
         if not backend.install():
             if verbose:
                 logger.warning("  -> [WARN] mihomo 安装失败，回退到 AutoDL 学术加速")
             load_autodl_turbo(verbose)
-            cache_network_decision("turbo")
+            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
             return
 
         # 订阅更新 — 利用失败缓存避免重复尝试
@@ -199,7 +189,7 @@ class NetworkManager:
                 if verbose:
                     logger.warning("  -> [WARN] 无可用本地配置，回退到 AutoDL 学术加速")
                 load_autodl_turbo(verbose)
-                cache_network_decision("turbo")
+                cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
                 return
             # 有本地配置，修补后继续启动 mihomo
             from src.lib.network.proxy.config import patch_config
@@ -210,7 +200,7 @@ class NetworkManager:
             if verbose:
                 logger.warning("  -> [WARN] 订阅更新失败，回退到 AutoDL 学术加速")
             load_autodl_turbo(verbose)
-            cache_network_decision("turbo")
+            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
             return
         else:
             # 订阅更新成功，清除失败标记
@@ -221,7 +211,7 @@ class NetworkManager:
             if verbose:
                 logger.warning("  -> [WARN] mihomo 启动失败，回退到 AutoDL 学术加速")
             load_autodl_turbo(verbose)
-            cache_network_decision("turbo")
+            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
             return
 
         # 健康检查
@@ -230,7 +220,7 @@ class NetworkManager:
                 logger.warning("  -> [WARN] mihomo 连通性测试失败，停止进程并回退到 AutoDL 学术加速")
             backend.stop()
             load_autodl_turbo(verbose)
-            cache_network_decision("turbo")
+            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
             return
         if verbose:
             logger.info("  -> ✓ mihomo 代理连通性测试通过")
@@ -241,57 +231,6 @@ class NetworkManager:
 
         self._backend = backend
 
-    def _try_fast_path(self, verbose: bool) -> bool:
-        """快速路径: 利用跨进程缓存复用上次的网络决策
-
-        当另一个进程（如 main.py 的 setup）已经完成网络初始化后，
-        后续短生命周期进程（如 model download）可以直接复用决策结果，
-        跳过耗时的 mihomo 安装→订阅→启动→健康检查流程。
-
-        快速路径条件:
-          - 缓存未过期
-          - 决策为 "turbo" → 直接加载 turbo 即可
-          - 决策为 "mihomo" → 检查 mihomo 进程是否还在运行
-
-        Returns:
-            True 表示快速路径命中，已完成代理初始化
-        """
-        cached = get_cached_network_decision()
-        if cached is None:
-            return False
-
-        if cached == "turbo":
-            # 上次决策是 turbo，直接加载
-            load_autodl_turbo(verbose)
-            if verbose:
-                logger.debug("  -> [快速路径] 复用 turbo 决策缓存")
-            return True
-
-        if cached == "mihomo":
-            # 上次决策是 mihomo，检查进程是否仍在运行
-            config = _build_proxy_config(self._config_file)
-            if config is None:
-                # 配置已被删除，缓存失效
-                invalidate_cache()
-                return False
-
-            backend = MihomoBackend(config)
-            if backend.is_running():
-                # mihomo 进程仍在运行，直接注入环境变量
-                _inject_proxy_env(config.proxy_url)
-                self._backend = backend
-                if verbose:
-                    logger.info(
-                        f"  -> ✓ mihomo 代理已就绪 (Proxy: {config.proxy_url})"
-                    )
-                return True
-            else:
-                # mihomo 进程已退出，缓存失效，需要完整重启
-                invalidate_cache()
-                return False
-
-        return False
-
     def stop_proxy(self) -> None:
         """停止代理进程（供关机/清理时调用）"""
         backend = self._backend
@@ -300,7 +239,8 @@ class NetworkManager:
             if config is None:
                 return
             backend = MihomoBackend(config)
-        backend.stop()
+        if not backend.stop():
+            raise RuntimeError("Failed to stop owned Mihomo process")
         self._backend = None
 
 

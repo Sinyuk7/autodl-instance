@@ -6,7 +6,7 @@ from src.main import create_pipeline, execute
 from src.core.results import PluginResult
 
 
-PLUGIN_NAMES = ["system", "torch_engine", "comfy_core", "workspace", "models"]
+PLUGIN_NAMES = ["system", "comfy_core", "workspace", "models"]
 
 
 def test_create_pipeline_returns_current_order():
@@ -54,34 +54,10 @@ def test_stop_records_plugin_warning(app_context):
     assert result.warnings[0].message == "snapshot failed"
 
 
-def test_until_stops_at_target(app_context):
-    called = []
-    addons = []
-    for name in PLUGIN_NAMES:
-        addon = MagicMock()
-        addon.name = name
-        addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
-        addons.append(addon)
-    with patch("src.main.create_pipeline", return_value=addons):
-        execute("setup", app_context, until="workspace")
-    assert called == PLUGIN_NAMES[:4]
-
-
-def test_only_runs_single_plugin(app_context):
-    called = []
-    addons = []
-    for name in PLUGIN_NAMES:
-        addon = MagicMock()
-        addon.name = name
-        addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
-        addons.append(addon)
-    with patch("src.main.create_pipeline", return_value=addons):
-        execute("setup", app_context, only="workspace")
-    assert called == ["workspace"]
-
-
-def test_only_with_unknown_plugin_exits(app_context):
-    with patch("src.main.create_pipeline", return_value=[]):
-        with pytest.raises(SystemExit) as exc_info:
-            execute("setup", app_context, only="unknown")
-    assert exc_info.value.code == 1
+def test_setup_failure_stops_pipeline(app_context):
+    first, last = MagicMock(), MagicMock()
+    first.setup.side_effect = RuntimeError("failure")
+    with patch("src.main.create_pipeline", return_value=[first, last]):
+        with pytest.raises(RuntimeError, match="failure"):
+            execute("setup", app_context)
+    last.setup.assert_not_called()

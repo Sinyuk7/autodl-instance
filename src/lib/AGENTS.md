@@ -15,19 +15,9 @@ lib/
 
 ## DOWNLOAD STRATEGIES
 
-**HuggingFace (`download/hf_hub.py`):**
-- Uses `huggingface_hub` + `hf_xet`
-- Version-aware caching
-- Token auth via `secrets.yaml`
-
-**CivitAI (`download/aria2.py`):**
-- Uses `aria2c` 32-thread
-- API token support
-- Automatic model info parsing
-
-**Direct URL (`download/aria2.py`):**
-- 32 threads, resume support
-- Progress tracking via aria2 RPC
+All HTTP sources use aria2 (up to 16 connections per server), with resumable staging files.
+HuggingFace uses file URLs and optional token headers; CivitAI API resolves model pages.
+Validate relative paths and symlink containment before writing files or sidecars.
 
 ## NETWORK MANAGEMENT
 
@@ -37,7 +27,7 @@ lib/
 - GitHub/HuggingFace mirror config
 - API token injection
 
-**Mutation boundary:** `setup_network()` may install/start a proxy and modify the current process environment. Do not call it from `status`, `doctor`, `stop`, imports, or other read-only paths.
+**Mutation boundary:** `setup_network()` may install/start a proxy and modify the current process environment. Do not call it from `status`, `doctor`, `stop`, imports, or other read-only paths. init intentionally initializes networking.
 
 ## WHERE TO LOOK
 
@@ -53,12 +43,12 @@ lib/
 **Downloaders:**
 - Implement common interface (implicit contract)
 - Accept `progress_callback` for UI updates
-- Return `Path` to downloaded file
+- Return a boolean download result
 - Handle auth via `secrets.yaml` (not params)
 
 **Network:**
 - Treat `direct`, `turbo`, `mihomo`, and `unavailable` as distinct observable outcomes
 - Start Mihomo independently from exporting proxy variables into a shell
 - Prefer per-command proxy variables; local checks must bypass proxies explicitly
-- Cache decisions only after validating the selected backend
+- Validate owned running Mihomo before reuse; cached decisions are diagnostic hints
 - Never log subscription URLs, nodes, tokens, or raw private configuration

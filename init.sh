@@ -7,7 +7,7 @@ cat >&2 <<'EOF'
 init.sh is no longer a runtime entrypoint.
 
 Install and run the packaged CLI instead:
-  uv tool install "git+https://github.com/Sinyuk7/autodl-instance.git@main"
+  uv tool install --editable --force /root/autodl-instance
   autodl init
   autodl setup
 EOF

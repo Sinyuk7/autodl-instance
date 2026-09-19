@@ -25,7 +25,7 @@ core/
 **artifacts.py:**
 - `Artifacts` dataclass - Strongly typed shared state
 - Persists to `.artifacts.json` after setup
-- Loaded on start/sync to access setup-time data
+- Loaded on start/stop to access setup-time data
 
 **ports.py (Interfaces):**
 - `ICommandRunner` - Command execution abstraction
@@ -33,7 +33,7 @@ core/
 
 **adapters.py (Implementations):**
 - `SubprocessRunner` - subprocess-based command runner
-- `FileStateManager` - YAML file-based state manager
+- `FileStateManager` - completion-marker file state manager
 
 ## WHERE TO LOOK
 
@@ -65,3 +65,5 @@ class Artifacts:
     existing_field: Optional[Path] = None
     my_new_field: Optional[str] = None  # Add here
 ```
+
+Runtime defaults place models/output on shared storage, downloads/cache/temp on local storage and the dedicated Python venv on the system disk. Never resolve ComfyUI Python from ambient Conda.
