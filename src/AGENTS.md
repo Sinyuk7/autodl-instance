@@ -41,5 +41,7 @@ Data directories and links belong to boot-time `init`; explicit `migrate` moves 
 - Plugin name = directory name (accessed via `self.name`)
 - Do not make inspection commands depend on a healthy lifecycle pipeline
 - comfy-cli owns Torch installation; installs must target the dedicated ComfyUI venv.
-- init prepares directories/links and proxy on each boot; migrate explicitly moves existing data without linking; setup installs only programs and dependencies. Help and model inspection do not initialize networking.
+- init prepares directories/links and proxy on each boot; migrate explicitly merges conflicting subdirectories and links them; setup installs only programs and dependencies. Help and model inspection do not initialize networking.
 - No --until/--only lifecycle options.
+
+- Shared migration module: `src/lib/migration`. init handles unambiguous child-directory moves/links; migrate allows explicit conflict merging. models/output roots remain physical directories and their regular files are never migrated.

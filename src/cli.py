@@ -89,8 +89,8 @@ def _write_init_config(args: argparse.Namespace) -> None:
             override = override or os.environ.get("COMFYUI_MODELS_DIR")
         if override:
             effective[key] = _normalize_config_value(key, override)
-    from src.core.data_layout import DataLayout
-    layout = DataLayout(Path(effective["comfy_dir"]), Path(effective["models_dir"]),
+    from src.lib.migration import MigrationManager
+    layout = MigrationManager(Path(effective["comfy_dir"]), Path(effective["models_dir"]),
                         Path(effective["output_dir"]), Path(effective["workspace_data_dir"]) / "user")
     layout.validate()
     paths = [Path(effective[key]) for key in PATH_CONFIG_KEYS]
@@ -242,7 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--python-env-dir", type=Path)
     init.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
 
-    migrate = sub.add_parser("migrate", help="explicitly move existing data; does not switch links")
+    migrate = sub.add_parser("migrate", help="merge conflicting data directories and establish links")
     migrate.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
 
     config = sub.add_parser("config", help="manage non-sensitive local config")
@@ -295,11 +295,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         return
 
     if args.command == "migrate":
-        from src.core.data_layout import DataLayout
+        from src.lib.migration import MigrationManager
         runtime = resolve_runtime_config(_code_root(), config_file=args.config_file)
-        DataLayout(runtime.comfy_dir, runtime.models_dir, runtime.output_dir,
+        MigrationManager(runtime.comfy_dir, runtime.models_dir, runtime.output_dir,
                    runtime.workspace_data_dir / "user").migrate()
-        print("数据迁移完成；请执行 autodl init 建立链接。")
+        print("数据迁移与链接处理完成；跳过项请查看警告。")
         return
 
     if args.command == "config":

@@ -95,3 +95,35 @@ def test_doctor_includes_disk_and_credentials_checks(tmp_path: Path):
 
     names = {check.name for check in checks}
     assert {"data disk", "HF token", "CivitAI token", "network"} <= names
+
+
+def test_status_recognizes_child_links_and_reports_unlinked_children(tmp_path):
+    project, base = tmp_path / "project", tmp_path / "data"
+    project.mkdir()
+    base.mkdir()
+    runtime = _runtime(tmp_path, project, base)
+    source = runtime.comfy_dir / "models"
+    source.mkdir(parents=True)
+    target = runtime.models_dir / "checkpoints"
+    target.mkdir(parents=True)
+    (target / "model.bin").write_bytes(b"model")
+    (runtime.models_dir / "root-file").write_bytes(b"untouched")
+    (source / "checkpoints").symlink_to(target)
+
+    def check():
+        with patch("src.status.resolve_runtime_config", return_value=runtime):
+            result = collect_quick_checks(project_root=project, base_dir=base,
+                workspace_dir=runtime.workspace_dir, workspace_data_dir=runtime.workspace_data_dir,
+                models_dir=runtime.models_dir, comfy_dir=runtime.comfy_dir)
+        return next(item for item in result if item.name == "models symlink")
+
+    for parent in (source, runtime.models_dir):
+        (parent / ".ipynb_checkpoints").mkdir()
+        (parent / ".broken").symlink_to(parent / "missing")
+    assert check().status == "OK"
+    assert ".ipynb_checkpoints" not in check().detail
+    assert ".broken" not in check().detail
+    (source / "new").mkdir()
+    assert check().status == "WARN"
+    assert "new" in check().detail
+    assert (runtime.models_dir / "root-file").read_bytes() == b"untouched"

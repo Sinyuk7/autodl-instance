@@ -117,6 +117,19 @@ def collect_quick_checks(
 
     if comfy_models.is_symlink() and comfy_models.resolve() == models_base.resolve():
         checks.append(StatusCheck("models symlink", "OK", f"{comfy_models} -> {models_base}"))
+    elif not comfy_models.is_symlink() and comfy_models.is_dir() and models_base.is_dir():
+        names = {p.name for p in comfy_models.iterdir() if not p.name.startswith(".") and (p.is_dir() or p.is_symlink())}
+        names |= {p.name for p in models_base.iterdir() if not p.name.startswith(".") and (p.is_dir() or p.is_symlink())}
+        pending = []
+        for name in sorted(names):
+            source, target = comfy_models / name, models_base / name
+            if not (source.is_symlink() and not target.is_symlink() and target.is_dir()
+                    and source.resolve() == target.resolve()):
+                pending.append(name)
+        checks.append(StatusCheck("models symlink", "WARN" if pending or not names else "OK",
+            "子目录待处理: " + ", ".join(pending) if pending else
+            (f"{len(names)} 个子目录链接正常；根目录文件不参与检查" if names else
+             "没有可验证的模型子目录链接")))
     elif comfy_models.exists():
         checks.append(StatusCheck("models symlink", "WARN", f"{comfy_models} 未指向 {models_base}"))
     else:

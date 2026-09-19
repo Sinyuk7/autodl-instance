@@ -4,8 +4,7 @@
 
 ## init
 
-合并已有配置和显式参数，补齐默认路径，验证受管存储挂载，预检全部 models/output/user 路径，创建缺失数据目录和安全软链接；已有非空实体目录或错误链接时报错，配置不变时不重写。安装前不创建 ComfyUI 源码目录。然后初始化网络：优先配置的 Mihomo，健康进程复用；无配置时尝试 AutoDL 学术加速，否则直连。配置失败不回滚已创建目录。
-
+合并已有配置和显式参数，补齐默认路径，验证受管存储挂载。调用 `MigrationManager.initialize()` 的无冲突策略：保持 models/output 实体根目录，只对直接子目录迁移和链接，根目录文件和以 `.` 开头的直接子项不参与处理；状态检查使用同样过滤。普通目录内部隐藏文件仍计入非空判断并保留。源为空可链接到非空目标；目标缺失或为空可自动迁移；双方非空则警告跳过。配置未变不重写，安装前不创建 ComfyUI 源码目录。然后初始化网络，复用健康代理。
 Mihomo 配置固定在本机 config.yaml 同级的 mihomo 目录，默认 ~/.config/autodl-instance/mihomo。历史数据盘代理配置不会自动迁移，也不会自动停止不属于新配置的进程。
 
 ## setup
@@ -21,7 +20,9 @@ GPU 类型仅指定 NVIDIA，CUDA wheel 选择交给 comfy-cli，不在项目内
 
 ## migrate
 
-显式执行数据搬迁，不安装依赖、不初始化网络、不创建链接。DataLayout 先预检所有源和目标，拒绝目录重叠、错误软链接和文件占位。实体 models/user/output 的新文件搬到目标，同名不同内容源文件存入冲突目录，同内容源副本去重。保留空源目录供 init 建立链接。重复执行安全，但不是整体事务；执行时应停止其他数据写入者。
+调用同一个 `MigrationManager.migrate()`，允许合并双方非空子目录并完成链接；不安装依赖、不初始化网络。`manager.py` 负责路径检查、锁、目录状态判断与策略，`transfer.py` 负责复制校验和带记录的自动迁移恢复，`merge.py` 负责显式冲突保留。`core/data_layout.py` 仅保留兼容导入，没有业务逻辑。
+
+自动迁移的目标发布采用原子不覆盖操作；记录目标设备号/inode，恢复时核对归属和内容后才清理源文件。记录保存在 ComfyUI/.autodl-layout。所有数据写入者必须在迁移时停止；不把进程中断恢复描述为断电或存储故障下的数据持久性保证。user 沿用整目录显式合并策略，init 保留非空 user。models/output 根目录文件在两种策略下都不修改。
 
 ## start / stop
 
@@ -40,5 +41,5 @@ autodl model download URL 交互选择文件名和相对目录；--preset 从 mo
 
 runtime.py 解析路径，环境变量覆盖本机配置，本机配置覆盖默认值（python_env_dir 通过本机配置指定）。
 ComfyUI 环境默认 /root/.venvs/comfyui，必须位于系统盘，拒绝覆盖非 venv 目录。
-默认 output_dir 为 /root/autodl-fs/ComfyUI/output；downloads/cache/temp 为 /root/autodl-tmp/ComfyUI 下同名目录。
+默认 output_dir 为 /root/autodl-fs/output；downloads/cache/temp 为 /root/autodl-tmp/ComfyUI 下同名目录。
 安装成功不等于 GPU 推理已验证，真实 GPU、联网、模型加载和 AutoDL 公网映射需另行验证。

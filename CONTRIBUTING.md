@@ -4,7 +4,7 @@
 
 - 安装与启动固定使用配置的 python_env_dir，默认 /root/.venvs/comfyui。
 - 插件顺序固定：system → comfy_core。Torch 由 comfy-cli 安装，不单独锁版本。
-- init 每次开机检查挂载、补目录、建立安全链接和初始化代理；setup 只安装环境；migrate 显式搬迁数据并保留冲突，不建立链接；下载按需初始化网络。
+- init 每次开机检查挂载、补目录、建立安全链接和初始化代理；setup 只安装环境；init/migrate 共用 src/lib/migration：前者处理无冲突子目录，后者显式合并冲突并链接，均不修改 models/output 根目录文件；下载按需初始化网络。
 - 帮助、status、doctor、模型列表必须只读，不能启动服务。
 - 模型、输出使用共享存储；downloads/cache/temp 使用本地盘。写入前验证挂载。
 - 配置在 ~/.config/autodl-instance/config.yaml；秘密在同目录 secrets.yaml，权限 600。

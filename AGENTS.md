@@ -114,6 +114,8 @@ Core: `pluggy>=1.3.0`, `PyYAML>=6.0.1`, `rich>=13.0.0`, `prompt_toolkit>=3.0.0`
 - Never print or commit proxy profiles, subscription URLs, tokens, private keys, or local secrets.
 - comfy-cli manages Torch and ComfyUI dependencies in `/root/.venvs/comfyui`; never fall back to base Conda or pin Torch independently.
 - CLI uses editable installation from `/root/autodl-instance`. No partial lifecycle flags or generated shell aliases.
-- `init` prepares missing directories, safe data links and networking each boot; `migrate` explicitly moves existing data without creating links; `setup` only installs programs/dependencies. Model help/list/status/types must remain read-only.
-- Output defaults to `/root/autodl-fs/ComfyUI/output`; downloads/cache/temp use `/root/autodl-tmp/ComfyUI`.
+- `init` prepares missing directories, safe data links and networking each boot; `migrate` explicitly merges conflicting subdirectories and links them; `setup` only installs programs/dependencies. Model help/list/status/types must remain read-only.
+- Output defaults to `/root/autodl-fs/output`; downloads/cache/temp use `/root/autodl-tmp/ComfyUI`.
 - Proxy profiles belong in `~/.config/autodl-instance/mihomo` on the system disk.
+
+- Shared migration module: `src/lib/migration`. init handles unambiguous child-directory moves/links; migrate allows explicit conflict merging. models/output roots remain physical directories and their regular files are never migrated.

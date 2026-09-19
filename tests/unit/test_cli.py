@@ -117,27 +117,24 @@ def test_init_repeat_does_not_rewrite_config(tmp_path):
         assert config.stat().st_mtime_ns == before
 
 
-def test_init_conflict_does_not_save_config_or_start_proxy(tmp_path):
-    import pytest
+def test_init_preserves_root_files_and_starts_proxy(tmp_path):
     source = tmp_path / "ComfyUI/output"
     source.mkdir(parents=True)
     (source / "keep.png").write_bytes(b"keep")
     with patch("src.lib.network.setup_network") as network:
-        with pytest.raises(RuntimeError, match="autodl migrate"):
-            main(init_args(tmp_path))
-        network.assert_not_called()
-    assert not (tmp_path / "config.yaml").exists()
-    assert not (tmp_path / "shared").exists()
+        main(init_args(tmp_path))
+        network.assert_called_once()
     assert (source / "keep.png").read_bytes() == b"keep"
+    assert not source.is_symlink()
 
 
-def test_migrate_cli_does_not_initialize_network_or_link(tmp_path):
+def test_migrate_cli_merges_and_links_without_network(tmp_path):
     from types import SimpleNamespace
-    source = tmp_path / "ComfyUI/models"
+    source = tmp_path / "ComfyUI/models/a"
     source.mkdir(parents=True)
     (source / "model.bin").write_bytes(b"model")
     config = tmp_path / "config.yaml"
-    runtime = SimpleNamespace(comfy_dir=source.parent, models_dir=tmp_path / "shared/models",
+    runtime = SimpleNamespace(comfy_dir=source.parent.parent, models_dir=tmp_path / "shared/models",
                               output_dir=tmp_path / "shared/output",
                               workspace_data_dir=tmp_path / "local/user-data")
     with patch("src.cli.resolve_runtime_config", return_value=runtime) as resolve, \
@@ -145,15 +142,22 @@ def test_migrate_cli_does_not_initialize_network_or_link(tmp_path):
         main(["migrate", "--config-file", str(config)])
         assert resolve.call_args.kwargs["config_file"] == config
         network.assert_not_called()
-    assert not source.is_symlink()
-    assert (runtime.models_dir / "model.bin").read_bytes() == b"model"
+    assert source.is_symlink()
+    assert (runtime.models_dir / "a/model.bin").read_bytes() == b"model"
 
 
 def test_init_environment_paths_match_runtime_without_persisting_override(tmp_path, monkeypatch):
     override = tmp_path / "override-models"
     monkeypatch.setenv("AUTODL_MODELS_DIR", str(override))
-    (tmp_path / "ComfyUI").mkdir()
+    (tmp_path / "ComfyUI/models/a").mkdir(parents=True)
     with patch("src.lib.network.setup_network"):
         main(init_args(tmp_path))
-    assert (tmp_path / "ComfyUI/models").resolve() == override
+    assert (tmp_path / "ComfyUI/models/a").resolve() == override / "a"
     assert load_yaml(tmp_path / "config.yaml")["models_dir"] == str(tmp_path / "shared/models")
+
+
+def test_shared_storage_defaults_are_direct_children():
+    from src.core.runtime import DEFAULT_MODELS_DIR, DEFAULT_OUTPUT_DIR, DEFAULT_CACHE_DIR
+    assert DEFAULT_MODELS_DIR == Path("/root/autodl-fs/models")
+    assert DEFAULT_OUTPUT_DIR == Path("/root/autodl-fs/output")
+    assert DEFAULT_CACHE_DIR == Path("/root/autodl-tmp/ComfyUI/cache")
