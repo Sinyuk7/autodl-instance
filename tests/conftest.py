@@ -77,7 +77,7 @@ def context_with_comfy(app_context: AppContext, tmp_base_dir: Path) -> AppContex
     """
     预设了 ComfyAddon 产出的上下文
     
-    用于测试依赖 comfy_dir 的下游插件（nodes, userdata, models）
+    用于测试依赖 comfy_dir 的下游插件（workspace, nodes, models）
     """
     comfy_dir = tmp_base_dir / "ComfyUI"
     comfy_dir.mkdir(parents=True, exist_ok=True)

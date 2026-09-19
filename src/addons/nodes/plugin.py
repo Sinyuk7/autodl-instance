@@ -2,11 +2,11 @@
 ComfyUI 自定义节点管理插件
 """
 import configparser
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, cast
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
+from src.core.python_env import resolve_target_python
 from src.core.results import PluginResult
 from src.core.utils import logger
 
@@ -111,7 +111,15 @@ class NodesAddon(BaseAddon):
             
             try:
                 ctx.cmd.run(
-                    [sys.executable, "-m", "pip", "install", "-r", str(requirements_file), "-q"],
+                    [
+                        resolve_target_python(),
+                        "-m",
+                        "pip",
+                        "install",
+                        "-r",
+                        str(requirements_file),
+                        "-q",
+                    ],
                     check=True,
                 )
                 installed_count += 1

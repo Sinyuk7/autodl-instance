@@ -49,29 +49,6 @@ class TestSetupUntilSystem:
         assert context_with_home.artifacts.user_dir is None
 
 
-class TestSetupUntilGitConfig:
-    """测试 setup --until git_config"""
-
-    def test_git_config_executes_after_system(self, context_with_home: AppContext):
-        """GitAddon 应在 SystemAddon 之后执行"""
-        execute("setup", context_with_home, until="git_config")
-        
-        # SystemAddon 的产出应存在
-        assert context_with_home.artifacts.uv_bin is not None
-        assert context_with_home.artifacts.bin_dir is not None
-
-    def test_git_config_completes_without_error(
-        self, context_with_home: AppContext, integration_runner: MockRunner
-    ):
-        """GitAddon 应正常完成（可能有条件跳过 git 命令）"""
-        # GitAddon 可能根据环境条件跳过某些操作
-        # 这里只验证执行不报错
-        execute("setup", context_with_home, until="git_config")
-        
-        # 验证执行完成（无异常）
-        assert True
-
-
 class TestSetupUntilTorchEngine:
     """测试 setup --until torch_engine"""
 

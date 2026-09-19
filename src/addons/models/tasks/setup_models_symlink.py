@@ -15,7 +15,7 @@ class SetupModelsSymlinkTask(BaseTask):
 
     name: str = "SetupModelsSymlink"
     description: str = "Ensure ComfyUI/models points at the data disk"
-    priority: int = 10
+    priority: int = 20
 
     MODELS_DIR_NAME: str = "models"
 
@@ -42,7 +42,11 @@ class SetupModelsSymlinkTask(BaseTask):
             logger.warning("  -> models 软链接指向错误，重建...")
             comfy_models.unlink()
         elif comfy_models.is_dir():
-            logger.info("  -> 检测到 models 物理目录")
+            if any(comfy_models.iterdir()):
+                logger.warning("  -> [SKIP] models 物理目录仍有内容，拒绝覆盖")
+                return False
+            comfy_models.rmdir()
+            logger.info("  -> 已删除空 models 物理目录")
         elif comfy_models.exists():
             logger.warning("  -> [WARN] models 路径是文件，删除...")
             comfy_models.unlink()
@@ -69,4 +73,6 @@ class SetupModelsSymlinkTask(BaseTask):
         logger.info(f"  -> 目标模型目录: {target_models}")
 
         created = self._setup_symlink(comfy_models, target_models)
-        return TaskResult.SUCCESS if created else TaskResult.SKIPPED
+        if comfy_models.is_symlink() and comfy_models.resolve() == target_models.resolve():
+            return TaskResult.SUCCESS if created else TaskResult.SKIPPED
+        return TaskResult.FAILED

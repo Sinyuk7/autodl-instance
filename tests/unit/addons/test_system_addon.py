@@ -84,10 +84,10 @@ class TestStart:
         addon.start(app_context)  # 不应抛出异常
 
 
-class TestSync:
-    """sync 钩子测试"""
+class TestStop:
+    """stop 钩子测试"""
 
     def test_sync_does_nothing(self, app_context: AppContext):
-        """sync 为空实现"""
+        """stop 为空实现"""
         addon = SystemAddon()
-        addon.sync(app_context)  # 不应抛出异常
+        addon.stop(app_context)  # 不应抛出异常

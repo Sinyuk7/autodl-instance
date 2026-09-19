@@ -1,11 +1,15 @@
 import logging
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from src.addons.models.plugin import ModelAddon
 from src.addons.models.tasks.migrate_existing_models import (
     MigrateExistingModelsTask,
     MigrationStats,
 )
+from src.addons.models.tasks.setup_models_symlink import SetupModelsSymlinkTask
 from src.core.task import TaskResult
 
 
@@ -30,7 +34,7 @@ def test_migrate_skips_ready_symlink_without_scanning(context_with_comfy, monkey
     migrate_spy.assert_not_called()
 
 
-def test_migrate_directory_suppresses_auxiliary_conflict_warnings(tmp_path, caplog):
+def test_migrate_directory_preserves_all_distinct_conflicts(tmp_path, caplog):
     src = tmp_path / "src"
     dst = tmp_path / "dst"
     src.mkdir()
@@ -51,13 +55,14 @@ def test_migrate_directory_suppresses_auxiliary_conflict_warnings(tmp_path, capl
         stats = task._migrate_directory_contents(src, dst)
 
     assert stats == MigrationStats(migrated=0, model_conflicts=1, auxiliary_conflicts=3)
-    assert "model.safetensors" in caplog.text
-    assert "README.md" not in caplog.text
-    assert "put_checkpoints_here" not in caplog.text
-    assert ".cache.meta" not in caplog.text
+    conflicts = tmp_path / ".autodl-model-conflicts"
+    assert (conflicts / "model.safetensors").read_bytes() == b"src-model"
+    assert (conflicts / "README.md").read_text(encoding="utf-8") == "src readme"
+    assert not (conflicts / "put_checkpoints_here").exists()
+    assert not (conflicts / ".cache.meta").exists()
 
 
-def test_migrate_keeps_physical_directory_when_conflicts_remain(context_with_comfy, caplog):
+def test_migrate_preserves_conflict_and_builds_symlink(context_with_comfy, caplog):
     task = MigrateExistingModelsTask()
     comfy_models = context_with_comfy.artifacts.comfy_dir / "models"
     target_models = context_with_comfy.base_dir / "models"
@@ -69,8 +74,38 @@ def test_migrate_keeps_physical_directory_when_conflicts_remain(context_with_com
     with caplog.at_level(logging.INFO, logger="autodl_setup"):
         result = task.execute(context_with_comfy)
 
-    assert result == TaskResult.SKIPPED
+    assert result == TaskResult.SUCCESS
+    assert comfy_models.is_symlink()
+    assert comfy_models.resolve() == target_models.resolve()
+    assert (target_models.parent / ".autodl-model-conflicts" / "model.safetensors").read_bytes() == b"src-model"
+    assert (target_models / "model.safetensors").read_bytes() == b"dst-model"
+
+
+def test_migrate_empty_directory_tree_builds_symlink(context_with_comfy):
+    task = MigrateExistingModelsTask()
+    comfy_models = context_with_comfy.artifacts.comfy_dir / "models"
+    target_models = context_with_comfy.base_dir / "models"
+    (comfy_models / "checkpoints" / "nested").mkdir(parents=True)
+
+    result = task.execute(context_with_comfy)
+
+    assert result == TaskResult.SUCCESS
+    assert comfy_models.is_symlink()
+    assert comfy_models.resolve() == target_models.resolve()
+
+
+def test_setup_symlink_fails_when_physical_directory_still_has_data(context_with_comfy):
+    comfy_models = context_with_comfy.artifacts.comfy_dir / "models"
+    (comfy_models / "unmigrated.safetensors").write_bytes(b"model")
+
+    result = SetupModelsSymlinkTask().execute(context_with_comfy)
+
+    assert result == TaskResult.FAILED
     assert comfy_models.is_dir()
     assert not comfy_models.is_symlink()
-    assert "无法创建软链接" not in caplog.text
-    assert "保留物理目录" in caplog.text
+
+
+def test_models_addon_propagates_task_failure(context_with_comfy):
+    with patch("src.addons.models.plugin.TaskRunner.run_tasks", return_value=False):
+        with pytest.raises(RuntimeError, match="Models setup failed"):
+            ModelAddon().setup(context_with_comfy)

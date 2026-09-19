@@ -4,12 +4,13 @@ MigrateExistingModels Task - migrate existing model files.
 Move files from a physical `ComfyUI/models` directory into the persistent
 models directory on the data disk, then rebuild the symlink when it is safe.
 """
-import shutil
+import filecmp
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from src.addons.models.lock import EXCLUDED_EXTENSIONS
+from src.core.file_migration import move_path_safely
 from src.core.interface import AppContext
 from src.core.task import BaseTask, TaskResult
 from src.core.utils import logger
@@ -30,7 +31,7 @@ class MigrateExistingModelsTask(BaseTask):
 
     name: str = "MigrateExistingModels"
     description: str = "Migrate model files from ComfyUI into the data disk"
-    priority: int = 20
+    priority: int = 10
 
     MODELS_DIR_NAME: str = "models"
 
@@ -57,46 +58,82 @@ class MigrateExistingModelsTask(BaseTask):
             return True
         return False
 
-    def _dir_has_entries(self, path: Path) -> bool:
-        return any(path.iterdir())
+    def _unique_path(self, path: Path) -> Path:
+        if not path.exists() and not path.is_symlink():
+            return path
+        index = 1
+        while (
+            path.with_name(f"{path.name}.{index}").exists()
+            or path.with_name(f"{path.name}.{index}").is_symlink()
+        ):
+            index += 1
+        return path.with_name(f"{path.name}.{index}")
 
-    def _migrate_directory_contents(self, src: Path, dst: Path) -> MigrationStats:
-        """Move directory contents recursively, skipping conflicts."""
+    def _preserve_conflict(self, item: Path, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        preserved = self._unique_path(destination)
+        move_path_safely(item, preserved)
+        logger.warning(f"  -> [WARN] 同名文件已保留至: {preserved}")
+
+    def _migrate_directory_contents(
+        self,
+        src: Path,
+        dst: Path,
+        conflicts: Optional[Path] = None,
+    ) -> MigrationStats:
+        """Move contents recursively without overwriting persistent models."""
         stats = MigrationStats()
+        conflicts = conflicts or (dst.parent / ".autodl-model-conflicts")
 
         if not src.exists() or not src.is_dir():
             return stats
 
-        for item in src.iterdir():
+        dst.mkdir(parents=True, exist_ok=True)
+        for item in list(src.iterdir()):
             target = dst / item.name
+            conflict = conflicts / item.name
+
+            if item.is_symlink():
+                if target.exists() or target.is_symlink():
+                    self._preserve_conflict(item, conflict)
+                    stats.model_conflicts += 1
+                else:
+                    move_path_safely(item, target)
+                    stats.migrated += 1
+                continue
 
             if item.is_file():
-                if target.exists():
+                if target.exists() or target.is_symlink():
+                    if target.is_file() and filecmp.cmp(item, target, shallow=False):
+                        item.unlink()
+                        stats.auxiliary_conflicts += 1
+                        continue
                     if self._is_auxiliary_file(item):
                         stats.auxiliary_conflicts += 1
                     else:
-                        logger.warning(f"  -> [SKIP] 文件已存在，跳过: {item.name}")
                         stats.model_conflicts += 1
+                    self._preserve_conflict(item, conflict)
                     continue
 
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(item), str(target))
+                move_path_safely(item, target)
                 logger.info(f"  -> 迁移文件: {item.name}")
                 stats.migrated += 1
                 continue
 
             if item.is_dir():
-                if not any(item.rglob("*")):
+                if target.exists() and (target.is_symlink() or not target.is_dir()):
+                    self._preserve_conflict(item, conflict)
+                    stats.model_conflicts += 1
                     continue
 
                 target.mkdir(parents=True, exist_ok=True)
-                child_stats = self._migrate_directory_contents(item, target)
+                child_stats = self._migrate_directory_contents(item, target, conflict)
                 stats.migrated += child_stats.migrated
                 stats.model_conflicts += child_stats.model_conflicts
                 stats.auxiliary_conflicts += child_stats.auxiliary_conflicts
 
-                if item.exists() and item.is_dir() and not self._dir_has_entries(item):
-                    item.rmdir()
+                item.rmdir()
 
         return stats
 
@@ -118,34 +155,25 @@ class MigrateExistingModelsTask(BaseTask):
             logger.info(f"  -> [Task] {self.name}: 无物理目录，跳过")
             return TaskResult.SKIPPED
 
-        if not self._dir_has_entries(comfy_models):
-            logger.info(f"  -> [Task] {self.name}: 目录为空，跳过")
-            return TaskResult.SKIPPED
-
         logger.info("  -> 开始迁移模型文件...")
+        target_models.mkdir(parents=True, exist_ok=True)
         stats = self._migrate_directory_contents(comfy_models, target_models)
 
         if stats.auxiliary_conflicts:
             logger.info(
-                f"  -> 跳过 {stats.auxiliary_conflicts} 个已存在的辅助文件"
+                f"  -> 处理 {stats.auxiliary_conflicts} 个已存在的辅助文件"
             )
         if stats.model_conflicts:
             logger.warning(
-                f"  -> 检测到 {stats.model_conflicts} 个同名模型文件，已保留目标目录中的现有文件"
+                f"  -> 检测到 {stats.model_conflicts} 个冲突，目标文件保持不变，源文件已单独保留"
             )
 
-        if self._dir_has_entries(comfy_models):
-            logger.info(
-                f"  -> [Task] {self.name}: 存在未迁移的文件，保留物理目录"
-            )
-            return TaskResult.SKIPPED
-
-        shutil.rmtree(comfy_models)
+        comfy_models.rmdir()
         logger.info(f"  -> 已迁移 {stats.migrated} 个文件，删除原目录")
 
         try:
             comfy_models.symlink_to(target_models)
             return TaskResult.SUCCESS
         except OSError as e:
-            logger.warning(f"  -> [SKIP] 无法创建软链接: {e}")
-            return TaskResult.SKIPPED
+            logger.error(f"  -> [ERROR] 无法创建软链接: {e}")
+            return TaskResult.FAILED

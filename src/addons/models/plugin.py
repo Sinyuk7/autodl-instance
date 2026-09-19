@@ -24,10 +24,10 @@ class ModelAddon(BaseAddon):
     module_dir = "models"
     MODELS_DIR_NAME = "models"  # ComfyUI 原生目录名
     
-    # Setup 阶段 Task 列表 (按 priority 顺序)
+    # Setup 阶段先迁移物理目录，再确认软链接。
     SETUP_TASKS = [
-        "SetupModelsSymlinkTask",
         "MigrateExistingModelsTask",
+        "SetupModelsSymlinkTask",
     ]
     
     # Sync 阶段 Task 列表 (按 priority 顺序)
@@ -68,14 +68,16 @@ class ModelAddon(BaseAddon):
             MigrateExistingModelsTask,
         )
         
-        TaskRunner.run_tasks(
+        ok = TaskRunner.run_tasks(
             tasks=[
-                SetupModelsSymlinkTask(),
                 MigrateExistingModelsTask(),
+                SetupModelsSymlinkTask(),
             ],
             ctx=ctx,
             addon_name="Models"
         )
+        if not ok:
+            raise RuntimeError("Models setup failed; ComfyUI/models is not safely linked")
         
         # 产出
         ctx.artifacts.models_dir = target_models

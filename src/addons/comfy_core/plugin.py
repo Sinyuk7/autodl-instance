@@ -12,6 +12,7 @@ from src.core.utils import logger, release_port
 class ComfyAddon(BaseAddon):
     module_dir = "comfy_core"
     DEFAULT_PORT = 6006
+    DEFAULT_COMFYUI_VERSION = "0.36.0"
 
     def _get_comfy_dir(self, ctx: AppContext) -> Path:
         """从 context 获取 ComfyUI 安装目录"""
@@ -67,7 +68,9 @@ class ComfyAddon(BaseAddon):
         manifest = self.get_manifest(ctx)
         torch_manifest = ctx.addon_manifests.get("torch_engine", {})
         index_url = self._get_pypi_mirror(ctx)
-        comfyui_version = str(manifest.get("comfyui_version") or "latest")
+        comfyui_version = str(
+            manifest.get("comfyui_version") or self.DEFAULT_COMFYUI_VERSION
+        )
         cuda_version = str(torch_manifest.get("min_cuda_version") or "13.0")
 
         cmd = [
@@ -209,7 +212,6 @@ class ComfyAddon(BaseAddon):
         except KeyboardInterrupt:
             logger.info("\n  -> 服务已安全关闭。")
 
-    @hookimpl
     @hookimpl
     def stop(self, context: AppContext) -> None:
         release_port(self.DEFAULT_PORT)

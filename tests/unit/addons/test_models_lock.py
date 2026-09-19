@@ -225,14 +225,14 @@ class TestGenerateSnapshotTask:
             "source": "preset",
         })
 
-        userdata_dir = tmp_path / "external-data"
+        workspace_data_dir = tmp_path / "workspace-data"
         app_context.project_root = project_root
-        app_context.userdata_dir = userdata_dir
+        app_context.workspace_data_dir = workspace_data_dir
         app_context.artifacts.models_dir = models
 
         result = GenerateSnapshotTask().execute(app_context)
 
-        lock_file = userdata_dir / "model-lock.yaml"
+        lock_file = workspace_data_dir / "model-lock.yaml"
         assert result == TaskResult.SUCCESS
         assert lock_file.exists()
         lock = load_yaml(lock_file)
@@ -262,15 +262,15 @@ class TestGenerateSnapshotTask:
         }
         save_yaml(base_dir / "model-lock.yaml", legacy_lock)
 
-        userdata_dir = tmp_path / "external-data"
+        workspace_data_dir = tmp_path / "workspace-data"
         app_context.project_root = project_root
-        app_context.userdata_dir = userdata_dir
+        app_context.workspace_data_dir = workspace_data_dir
         app_context.base_dir = base_dir
         app_context.artifacts.models_dir = models
 
         result = GenerateSnapshotTask().execute(app_context)
 
-        lock = load_yaml(userdata_dir / "model-lock.yaml")
+        lock = load_yaml(workspace_data_dir / "model-lock.yaml")
         assert result == TaskResult.SUCCESS
         assert lock["models"][0]["hashes"][0]["hash"] == "legacyhash"
 

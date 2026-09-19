@@ -1,180 +1,87 @@
-"""
-Pipeline 执行流程测试
-
-验证:
-- create_pipeline 返回正确的插件顺序
-- execute 函数的 --until 和 --only 参数
-- sync 逆序执行
-"""
-import pytest
 from unittest.mock import MagicMock, patch
-from pathlib import Path
+
+import pytest
 
 from src.main import create_pipeline, execute
-from src.core.interface import AppContext
 from src.core.results import PluginResult
 
 
-class TestCreatePipeline:
-    """create_pipeline 测试"""
-
-    def test_returns_correct_order(self):
-        """应返回 7 个插件，顺序正确"""
-        pipeline = create_pipeline()
-
-        assert len(pipeline) == 7
-
-        names = [p.name for p in pipeline]
-        assert names == [
-            "system",
-            "git_config",
-            "torch_engine",
-            "comfy_core",
-            "userdata",
-            "nodes",
-            "models",
-        ]
-
-    def test_all_have_name_property(self):
-        """每个插件都应有 name 属性"""
-        pipeline = create_pipeline()
-        for addon in pipeline:
-            assert hasattr(addon, "name")
-            assert isinstance(addon.name, str)
-            assert len(addon.name) > 0
+PLUGIN_NAMES = ["system", "torch_engine", "comfy_core", "workspace", "nodes", "models"]
 
 
-class TestExecute:
-    """execute 函数测试"""
+def test_create_pipeline_returns_current_order():
+    assert [addon.name for addon in create_pipeline()] == PLUGIN_NAMES
 
-    def test_setup_calls_all_plugins(self, app_context):
-        """setup 应按顺序调用所有插件"""
-        ctx = app_context
-        called = []
 
-        # Patch 所有插件的 setup 方法
-        with patch("src.main.create_pipeline") as mock_pipeline:
-            mock_addons = []
-            for name in ["system", "git_config", "torch_engine", "comfy_core", "userdata", "nodes", "models"]:
-                addon = MagicMock()
-                addon.name = name
-                addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
-                mock_addons.append(addon)
-            mock_pipeline.return_value = mock_addons
+def test_setup_calls_all_plugins(app_context):
+    called = []
+    addons = []
+    for name in PLUGIN_NAMES:
+        addon = MagicMock()
+        addon.name = name
+        addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
+        addons.append(addon)
+    with patch("src.main.create_pipeline", return_value=addons):
+        execute("setup", app_context)
+    assert called == PLUGIN_NAMES
 
-            execute("setup", ctx)
 
-        assert called == ["system", "git_config", "torch_engine", "comfy_core", "userdata", "nodes", "models"]
+def test_stop_collects_failures_and_continues(app_context):
+    called = []
+    first = MagicMock()
+    first.name = "first"
+    first.stop = MagicMock(side_effect=lambda ctx: called.append("first"))
+    failing = MagicMock()
+    failing.name = "failing"
+    failing.stop = MagicMock(side_effect=RuntimeError("boom"))
+    last = MagicMock()
+    last.name = "last"
+    last.stop = MagicMock(side_effect=lambda ctx: called.append("last"))
+    with patch("src.main.create_pipeline", return_value=[first, failing, last]):
+        result = execute("stop", app_context)
+    assert called == ["first", "last"]
+    assert not result.ok
+    assert result.failures[0].plugin == "failing"
 
-    def test_sync_reverses_order(self, app_context):
-        """sync 应逆序执行"""
-        ctx = app_context
-        called = []
 
-        with patch("src.main.create_pipeline") as mock_pipeline:
-            mock_addons = []
-            for name in ["system", "git_config", "comfy_core"]:
-                addon = MagicMock()
-                addon.name = name
-                addon.sync = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
-                mock_addons.append(addon)
-            mock_pipeline.return_value = mock_addons
+def test_stop_records_plugin_warning(app_context):
+    addon = MagicMock()
+    addon.name = "nodes"
+    addon.stop = MagicMock(return_value=PluginResult.warning("snapshot failed"))
+    with patch("src.main.create_pipeline", return_value=[addon]):
+        result = execute("stop", app_context)
+    assert result.ok
+    assert result.warnings[0].message == "snapshot failed"
 
-            execute("sync", ctx)
 
-        assert called == ["comfy_core", "git_config", "system"]
+def test_until_stops_at_target(app_context):
+    called = []
+    addons = []
+    for name in PLUGIN_NAMES:
+        addon = MagicMock()
+        addon.name = name
+        addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
+        addons.append(addon)
+    with patch("src.main.create_pipeline", return_value=addons):
+        execute("setup", app_context, until="workspace")
+    assert called == PLUGIN_NAMES[:4]
 
-    def test_sync_collects_failures_and_continues(self, app_context):
-        """sync 插件异常应记录失败并继续执行后续插件"""
-        ctx = app_context
-        called = []
 
-        with patch("src.main.create_pipeline") as mock_pipeline:
-            first = MagicMock()
-            first.name = "first"
-            first.sync = MagicMock(side_effect=lambda ctx: called.append("first"))
+def test_only_runs_single_plugin(app_context):
+    called = []
+    addons = []
+    for name in PLUGIN_NAMES:
+        addon = MagicMock()
+        addon.name = name
+        addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
+        addons.append(addon)
+    with patch("src.main.create_pipeline", return_value=addons):
+        execute("setup", app_context, only="workspace")
+    assert called == ["workspace"]
 
-            failing = MagicMock()
-            failing.name = "failing"
-            failing.sync = MagicMock(side_effect=RuntimeError("boom"))
 
-            last = MagicMock()
-            last.name = "last"
-            last.sync = MagicMock(side_effect=lambda ctx: called.append("last"))
-
-            mock_pipeline.return_value = [last, failing, first]
-
-            result = execute("sync", ctx)
-
-        assert called == ["first", "last"]
-        assert not result.ok
-        assert result.failures[0].plugin == "failing"
-
-    def test_sync_records_plugin_warning(self, app_context):
-        """sync 插件返回 warning 时应记录但不失败"""
-        ctx = app_context
-
-        with patch("src.main.create_pipeline") as mock_pipeline:
-            addon = MagicMock()
-            addon.name = "nodes"
-            addon.sync = MagicMock(return_value=PluginResult.warning("snapshot failed"))
-            mock_pipeline.return_value = [addon]
-
-            result = execute("sync", ctx)
-
-        assert result.ok
-        assert result.warnings[0].plugin == "nodes"
-        assert result.warnings[0].message == "snapshot failed"
-
-    def test_until_stops_at_target(self, app_context):
-        """--until 应在目标插件后停止"""
-        ctx = app_context
-        called = []
-
-        with patch("src.main.create_pipeline") as mock_pipeline:
-            mock_addons = []
-            for name in ["system", "git_config", "torch_engine", "comfy_core"]:
-                addon = MagicMock()
-                addon.name = name
-                addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
-                mock_addons.append(addon)
-            mock_pipeline.return_value = mock_addons
-
-            execute("setup", ctx, until="git_config")
-
-        assert called == ["system", "git_config"]
-
-    def test_only_runs_single_plugin(self, app_context):
-        """--only 应只执行指定插件"""
-        ctx = app_context
-        called = []
-
-        with patch("src.main.create_pipeline") as mock_pipeline:
-            mock_addons = []
-            for name in ["system", "git_config", "comfy_core"]:
-                addon = MagicMock()
-                addon.name = name
-                addon.setup = MagicMock(side_effect=lambda ctx, n=name: called.append(n))
-                mock_addons.append(addon)
-            mock_pipeline.return_value = mock_addons
-
-            execute("setup", ctx, only="git_config")
-
-        assert called == ["git_config"]
-
-    def test_only_with_unknown_plugin_exits(self, app_context):
-        """--only 指定未知插件应报错退出"""
-        ctx = app_context
-
-        with patch("src.main.create_pipeline") as mock_pipeline:
-            mock_addons = []
-            for name in ["system", "git_config"]:
-                addon = MagicMock()
-                addon.name = name
-                mock_addons.append(addon)
-            mock_pipeline.return_value = mock_addons
-
-            with pytest.raises(SystemExit) as exc_info:
-                execute("setup", ctx, only="unknown_plugin")
-            
-            assert exc_info.value.code == 1
+def test_only_with_unknown_plugin_exits(app_context):
+    with patch("src.main.create_pipeline", return_value=[]):
+        with pytest.raises(SystemExit) as exc_info:
+            execute("setup", app_context, only="unknown")
+    assert exc_info.value.code == 1

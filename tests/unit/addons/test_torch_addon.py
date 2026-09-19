@@ -8,6 +8,7 @@ import pytest
 from src.addons.torch_engine.plugin import TorchAddon
 from src.core.interface import AppContext
 from src.core.ports import CommandResult
+from src.core.python_env import resolve_target_python
 
 
 class TestSetup:
@@ -19,13 +20,13 @@ class TestSetup:
         conda_python.touch()
         monkeypatch.setenv("CONDA_PREFIX", str(tmp_path / "miniconda3"))
 
-        assert TorchAddon()._get_target_python() == str(conda_python)
+        assert resolve_target_python() == str(conda_python)
 
     def test_passes_addon_name_to_task_runner(self, app_context: AppContext):
         addon = TorchAddon()
 
         with patch("src.addons.torch_engine.plugin.TaskRunner.run_tasks", return_value=True) as run_tasks:
-            with patch.object(addon, "_get_target_python", return_value=sys.executable):
+            with patch("src.addons.torch_engine.plugin.resolve_target_python", return_value=sys.executable):
                 with patch.object(addon, "_is_torch_cuda_ready", return_value=True):
                     with patch.object(addon, "_get_torch_cuda_info", return_value="torch=2.6.0"):
                         addon.setup(app_context)
@@ -42,7 +43,7 @@ class TestSetup:
         )
 
         addon = TorchAddon()
-        with patch.object(addon, "_get_target_python", return_value=sys.executable):
+        with patch("src.addons.torch_engine.plugin.resolve_target_python", return_value=sys.executable):
             addon.setup(app_context)
 
         mock_runner.assert_not_called_with("uv pip install")
@@ -63,11 +64,14 @@ class TestSetup:
         )
 
         addon = TorchAddon()
-        with patch.object(addon, "_get_target_python", return_value=sys.executable):
+        with patch("src.addons.torch_engine.plugin.resolve_target_python", return_value=sys.executable):
             addon.setup(app_context)
 
         install = mock_runner.assert_called_with(f"uv pip install --python {sys.executable}")
         assert "--upgrade" not in install.cmd
+        assert "torch==2.11.0+cu130" in install.cmd
+        assert "torchvision==0.26.0+cu130" in install.cmd
+        assert "torchaudio==2.11.0+cu130" in install.cmd
         assert app_context.artifacts.torch_installed is True
 
     def test_exits_when_driver_insufficient(self, app_context: AppContext, mock_runner):
@@ -86,7 +90,7 @@ class TestSetup:
 
         addon = TorchAddon()
 
-        with patch.object(addon, "_get_target_python", return_value=sys.executable):
+        with patch("src.addons.torch_engine.plugin.resolve_target_python", return_value=sys.executable):
             with pytest.raises(SystemExit) as excinfo:
                 addon.setup(app_context)
 
@@ -107,7 +111,7 @@ class TestSetup:
         )
 
         addon = TorchAddon()
-        with patch.object(addon, "_get_target_python", return_value=sys.executable):
+        with patch("src.addons.torch_engine.plugin.resolve_target_python", return_value=sys.executable):
             addon.setup(app_context)
 
         assert addon.min_driver == 600

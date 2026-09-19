@@ -82,7 +82,7 @@ autodl secrets set mihomo-subscription-url
 autodl setup
 ```
 
-首次执行会安装必要系统工具、检查驱动、安装 CUDA 13.0 对应的 PyTorch、部署 ComfyUI、建立数据盘软链接，并安装内置节点。这个过程会下载较大的依赖；重复执行应复用已有状态。
+首次执行会安装必要系统工具、检查驱动、安装锁定的 `torch 2.11.0+cu130`、`torchvision 0.26.0+cu130`、`torchaudio 2.11.0+cu130`，部署 ComfyUI `0.36.0`，建立数据盘软链接，并安装内置节点。这个过程会下载较大的依赖；重复执行会复用已有状态。
 
 安装完成后检查：
 
@@ -125,6 +125,24 @@ autodl model cache
 ```
 
 `model-lock.yaml` 是本地模型状态清单，不是自动下载任务表。缺失或发生变化的模型只会在 `autodl model status` 中提示。
+
+## 手动升级 ComfyUI
+
+自动装配固定使用经过验证的 ComfyUI `0.36.0`。用户可以在当前实例上主动升级到最新稳定版：
+
+```bash
+autodl stop
+comfy --workspace /root/ComfyUI update comfy --version latest
+autodl start
+```
+
+`comfy update` 会更新 ComfyUI 及其 Python 依赖，但不会更新 Torch。升级后再次执行普通 `autodl setup` 不会自动降级 ComfyUI。需要回到项目验证版本时执行：
+
+```bash
+comfy --workspace /root/ComfyUI update comfy --version 0.36.0
+```
+
+手动升级属于用户选择的本机状态；升级自定义节点前建议保留工作流和节点快照。
 
 ## 新实例恢复
 

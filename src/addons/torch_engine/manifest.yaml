@@ -7,11 +7,11 @@ min_driver_version: 580
 # CUDA 最低版本要求 (用于幂等性检查)
 min_cuda_version: 13.0
 
-# PyTorch 下载源 (stable + CUDA 13.0)
+# PyTorch CUDA 13.0 wheel source
 index_url: "https://download.pytorch.org/whl/cu130"
 
-# 需要安装的算力包
+# Stable, mutually compatible versions verified against the CUDA 13.0 index.
 packages:
-  - "torch"
-  - "torchvision"
-  - "torchaudio"
+  - "torch==2.11.0+cu130"
+  - "torchvision==0.26.0+cu130"
+  - "torchaudio==2.11.0+cu130"

@@ -10,7 +10,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.main import load_manifests, create_context, main, BASE_DIR, execute, warn_runtime_migration
+from src.main import load_manifests, create_context, main, BASE_DIR, execute
 from src.core.interface import AppContext
 from src.core.adapters import SubprocessRunner
 from src.core.artifacts import ARTIFACTS_FILENAME
@@ -95,7 +95,7 @@ class TestCreateContext:
             "code_root": code_root,
             "base_dir": tmp_path / "data",
             "workspace_dir": tmp_path / "workspace",
-            "userdata_dir": tmp_path / "userdata",
+            "workspace_data_dir": tmp_path / "workspace-data",
             "models_dir": tmp_path / "models",
             "comfy_dir": tmp_path / "ComfyUI",
             "config_file": tmp_path / "config.yaml",
@@ -136,11 +136,11 @@ class TestCreateContext:
             "code_root": code_root,
             "base_dir": tmp_path / "data",
             "workspace_dir": tmp_path / "workspace",
-            "userdata_dir": tmp_path / "userdata",
+            "workspace_data_dir": tmp_path / "workspace-data",
             "models_dir": tmp_path / "models",
             "comfy_dir": tmp_path / "ComfyUI",
             "config_file": tmp_path / "config.yaml",
-            "local_config": {"userdata_repo": "git@example.com:repo.git"},
+            "local_config": {},
         })()
         with patch("src.main.resolve_runtime_config", return_value=runtime), \
              patch("src.main.load_manifests", return_value={}):
@@ -148,9 +148,9 @@ class TestCreateContext:
 
         assert ctx.code_root == code_root
         assert ctx.workspace_dir == tmp_path / "workspace"
-        assert ctx.userdata_dir == tmp_path / "userdata"
+        assert ctx.workspace_data_dir == tmp_path / "workspace-data"
         assert ctx.models_dir == tmp_path / "models"
-        assert ctx.local_config["userdata_repo"] == "git@example.com:repo.git"
+        assert ctx.local_config == {}
 
 
 def test_execute_saves_artifacts_to_workspace(app_context: AppContext, tmp_path: Path):
@@ -166,17 +166,6 @@ def test_execute_saves_artifacts_to_workspace(app_context: AppContext, tmp_path:
     assert not (app_context.project_root / ARTIFACTS_FILENAME).exists()
 
 
-def test_warn_runtime_migration_warns_on_expected_tool_version(app_context: AppContext, tmp_path: Path, caplog):
-    app_context.userdata_dir = tmp_path / "userdata"
-    meta = app_context.userdata_dir / ".autodl-instance"
-    meta.mkdir(parents=True)
-    (meta / "tool-version").write_text("999.0.0\n", encoding="utf-8")
-
-    warn_runtime_migration(app_context)
-
-    assert "期望工具版本" in caplog.text
-
-
 class TestMain:
     """main() CLI 入口测试"""
 
@@ -187,7 +176,7 @@ class TestMain:
             "code_root": tmp_path / "code",
             "base_dir": tmp_path / "data",
             "workspace_dir": tmp_path / "workspace",
-            "userdata_dir": tmp_path / "userdata",
+            "workspace_data_dir": tmp_path / "workspace-data",
             "models_dir": tmp_path / "models",
             "comfy_dir": tmp_path / "ComfyUI",
             "config_file": tmp_path / "config.yaml",
@@ -201,7 +190,7 @@ class TestMain:
              patch("src.main.execute") as mock_exec:
             yield {"create_context": mock_ctx, "execute": mock_exec}
 
-    @pytest.mark.parametrize("action", ["setup", "start", "sync"])
+    @pytest.mark.parametrize("action", ["setup", "start", "stop"])
     def test_valid_actions(self, mock_dependencies, monkeypatch, action):
         """有效 action 正确传递给 execute"""
         monkeypatch.setattr("sys.argv", ["main.py", action])
@@ -244,7 +233,7 @@ class TestMain:
             "code_root": Path("/tmp/code"),
             "base_dir": Path("/tmp/data"),
             "workspace_dir": Path("/tmp/workspace"),
-            "userdata_dir": Path("/tmp/userdata"),
+            "workspace_data_dir": Path("/tmp/workspace-data"),
             "models_dir": Path("/tmp/models"),
             "comfy_dir": Path("/tmp/ComfyUI"),
             "config_file": Path("/tmp/config.yaml"),

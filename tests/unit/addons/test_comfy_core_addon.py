@@ -33,7 +33,7 @@ class TestSetup:
         assert "--index-url https://pypi.org/simple" in cli_install.cmd
         install = mock_runner.assert_called_with("comfy --workspace")
         assert "--skip-prompt install" in install.cmd
-        assert "--version latest" in install.cmd
+        assert "--version 0.36.0" in install.cmd
         assert "--nvidia --cuda-version 13.0" in install.cmd
         assert "--skip-torch-or-directml" in install.cmd
         assert install.kwargs["capture_output"] is False

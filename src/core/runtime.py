@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from src.lib.utils import load_yaml, save_yaml
+from src.lib.utils import load_yaml
 
 
 PACKAGE_NAME = "autodl-instance"

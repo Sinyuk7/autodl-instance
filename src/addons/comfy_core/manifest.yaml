@@ -1,5 +1,5 @@
 # ComfyUI installation policy for AutoDL NVIDIA instances.
 comfy_cli_version: "1.20.0"
-comfyui_version: "latest"
+comfyui_version: "0.36.0"
 pypi_index_url: "https://pypi.org/simple"
 fast_deps: true
