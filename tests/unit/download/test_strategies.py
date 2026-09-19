@@ -44,6 +44,36 @@ class TestAria2Strategy:
         
         assert isinstance(entries, list)
         assert len(entries) == 0  # aria2 无持久化缓存
+
+    def test_cache_info_lists_only_incomplete_downloads(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("AUTODL_DOWNLOADS_DIR", str(tmp_path))
+        partial = tmp_path / "checkpoints" / "model.safetensors"
+        partial.parent.mkdir()
+        partial.write_bytes(b"partial")
+        Path(str(partial) + ".aria2").write_bytes(b"control")
+        (tmp_path / "complete.safetensors").write_bytes(b"complete")
+
+        entries = Aria2Strategy().cache_info()
+
+        assert len(entries) == 1
+        assert entries[0].size_bytes == len(b"partialcontrol")
+        assert entries[0].path.name == "model.safetensors.aria2"
+
+    def test_purge_cache_removes_partial_pair_only(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("AUTODL_DOWNLOADS_DIR", str(tmp_path))
+        partial = tmp_path / "model.safetensors"
+        control = Path(str(partial) + ".aria2")
+        complete = tmp_path / "complete.safetensors"
+        partial.write_bytes(b"partial")
+        control.write_bytes(b"control")
+        complete.write_bytes(b"complete")
+
+        results = Aria2Strategy().purge_cache()
+
+        assert len(results) == 1 and results[0].success
+        assert not partial.exists()
+        assert not control.exists()
+        assert complete.exists()
     
     def test_pre_download_creates_parent_dir(self, tmp_path: Path):
         """pre_download 创建父目录"""

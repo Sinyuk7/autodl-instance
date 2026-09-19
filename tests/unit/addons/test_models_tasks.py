@@ -10,6 +10,7 @@ from src.addons.models.tasks.migrate_existing_models import (
     MigrationStats,
 )
 from src.addons.models.tasks.setup_models_symlink import SetupModelsSymlinkTask
+from src.addons.models.tasks.check_orphan_files import CheckOrphanFilesTask
 from src.core.task import TaskResult
 
 
@@ -103,6 +104,37 @@ def test_setup_symlink_fails_when_physical_directory_still_has_data(context_with
     assert result == TaskResult.FAILED
     assert comfy_models.is_dir()
     assert not comfy_models.is_symlink()
+
+
+def test_migrate_refuses_wrong_symlink(context_with_comfy, tmp_path):
+    comfy_models = context_with_comfy.artifacts.comfy_dir / "models"
+    target_models = context_with_comfy.base_dir / "models"
+    wrong_target = tmp_path / "other-models"
+    wrong_target.mkdir()
+    comfy_models.rmdir()
+    comfy_models.symlink_to(wrong_target)
+
+    result = MigrateExistingModelsTask().execute(context_with_comfy)
+
+    assert result == TaskResult.FAILED
+    assert comfy_models.is_symlink()
+    assert comfy_models.resolve() == wrong_target.resolve()
+    assert not target_models.exists()
+
+
+def test_orphan_check_preserves_conflicting_model(context_with_comfy):
+    comfy_models = context_with_comfy.artifacts.comfy_dir / "models"
+    target_models = context_with_comfy.base_dir / "models"
+    target_models.mkdir(parents=True)
+    (comfy_models / "model.safetensors").write_bytes(b"source")
+    (target_models / "model.safetensors").write_bytes(b"target")
+
+    result = CheckOrphanFilesTask().execute(context_with_comfy)
+
+    assert result == TaskResult.SUCCESS
+    assert (target_models / "model.safetensors").read_bytes() == b"target"
+    conflict = target_models.parent / ".autodl-model-conflicts" / "model.safetensors"
+    assert conflict.read_bytes() == b"source"
 
 
 def test_models_addon_propagates_task_failure(context_with_comfy):

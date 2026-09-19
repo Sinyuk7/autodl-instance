@@ -20,5 +20,4 @@ api_port: 9090
 # 内核安装路径
 install_dir: /usr/local/bin
 
-# 配置文件目录
-config_dir: /etc/mihomo
+# 配置目录由运行时 workspace_data_dir/mihomo 决定，不依赖当前工作目录。

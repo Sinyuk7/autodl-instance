@@ -19,7 +19,6 @@ LOCK_FILE_NAME = "model-lock.yaml"
 
 # 与 main.py 保持一致的基础目录
 _BASE_DIR = Path("/root/autodl-tmp")
-_MODELS_DIR_NAME = "models"
 
 
 def get_lock_file(workspace_data_dir: Path | None = None) -> Path:
@@ -48,7 +47,7 @@ def get_models_base(fallback: Path | None = None) -> Path:
     """获取模型根目录。
 
     优先读取环境变量 COMFYUI_MODELS_DIR，
-    否则使用 /root/autodl-tmp/models/ 目录。
+    否则使用运行时配置的文件存储模型目录。
     
     采用软链接方案后，此目录与 ComfyUI/models/ 等价。
     """
@@ -65,6 +64,19 @@ def get_models_base(fallback: Path | None = None) -> Path:
     from src.core.runtime import resolve_runtime_config
 
     return resolve_runtime_config(PROJECT_ROOT).models_dir
+
+
+def get_downloads_base(fallback: Path | None = None) -> Path:
+    """Return the local-disk staging directory for model downloads."""
+    env_path = os.environ.get("AUTODL_DOWNLOADS_DIR")
+    if env_path:
+        return Path(env_path)
+    if fallback is not None:
+        return fallback
+
+    from src.core.runtime import resolve_runtime_config
+
+    return resolve_runtime_config(PROJECT_ROOT).downloads_dir
 
 
 def get_available_types() -> List[str]:

@@ -57,9 +57,6 @@ def test_status_reports_persistent_workspace_and_model_state(tmp_path: Path):
     workspace_data.mkdir(parents=True)
     models.mkdir()
     (comfy / "models").symlink_to(models)
-    snapshots = workspace_data / "user" / "__manager" / "snapshots"
-    snapshots.mkdir(parents=True)
-    (snapshots / "2026_snapshot.json").write_text("{}", encoding="utf-8")
     save_yaml(workspace_data / "model-lock.yaml", {"models": []})
     runtime = _runtime(tmp_path, project, base)
 
@@ -77,7 +74,6 @@ def test_status_reports_persistent_workspace_and_model_state(tmp_path: Path):
     assert by_name["workspace data"].status == "OK"
     assert by_name["models symlink"].status == "OK"
     assert by_name["model-lock"].status == "OK"
-    assert by_name["node snapshot"].status == "OK"
 
 
 def test_doctor_includes_disk_and_credentials_checks(tmp_path: Path):

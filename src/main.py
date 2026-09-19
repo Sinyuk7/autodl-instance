@@ -12,7 +12,6 @@ import yaml
 
 from src.addons.comfy_core.plugin import ComfyAddon
 from src.addons.models.plugin import ModelAddon
-from src.addons.nodes.plugin import NodesAddon
 from src.addons.system.plugin import SystemAddon
 from src.addons.torch_engine.plugin import TorchAddon
 from src.addons.workspace.plugin import WorkspaceAddon
@@ -23,6 +22,8 @@ from src.core.results import PipelineResult, PluginResult
 from src.core.runtime import (
     DEFAULT_BASE_DIR,
     DEFAULT_COMFY_DIR,
+    configure_cache_environment,
+    require_managed_storage_mount,
     resolve_runtime_config,
 )
 from src.core.utils import logger, setup_logger
@@ -45,8 +46,7 @@ def create_pipeline() -> List[BaseAddon]:
     2. torch_engine - PyTorch CUDA 环境
     3. comfy_core   - ComfyUI 核心安装 → 产出 comfy_dir
     4. workspace    - 本地工作数据持久化 → 依赖 comfy_dir
-    5. nodes        - 节点管理 → 依赖 comfy_dir
-    6. models       - 模型管理 → 依赖 comfy_dir
+    5. models       - 模型存储迁移与目录布局 → 依赖 comfy_dir
     
     注意: 代理服务（turbo / mihomo）在 setup_network() 中已初始化，
     不作为 pipeline 插件，因为所有插件都依赖网络。
@@ -56,7 +56,6 @@ def create_pipeline() -> List[BaseAddon]:
         TorchAddon(),
         ComfyAddon(),
         WorkspaceAddon(),
-        NodesAddon(),
         ModelAddon(),
     ]
 
@@ -123,6 +122,17 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
     """
     code_root = Path(__file__).resolve().parent.parent
     runtime = resolve_runtime_config(code_root)
+    require_managed_storage_mount(
+        runtime.base_dir,
+        runtime.workspace_dir,
+        runtime.workspace_data_dir,
+        runtime.models_dir,
+        runtime.output_dir,
+        runtime.downloads_dir,
+        runtime.cache_dir,
+        runtime.temp_dir,
+    )
+    configure_cache_environment(runtime)
     runtime.workspace_dir.mkdir(parents=True, exist_ok=True)
     
     # 根据场景决定是否加载已持久化的 artifacts
@@ -138,6 +148,10 @@ def create_context(debug: bool = False, load_artifacts: bool = False) -> AppCont
         workspace_dir=runtime.workspace_dir,
         workspace_data_dir=runtime.workspace_data_dir,
         models_dir=runtime.models_dir,
+        output_dir=runtime.output_dir,
+        downloads_dir=runtime.downloads_dir,
+        cache_dir=runtime.cache_dir,
+        temp_dir=runtime.temp_dir,
         comfy_dir=runtime.comfy_dir,
         config_file=runtime.config_file,
         local_config=runtime.local_config,
@@ -236,17 +250,16 @@ def main() -> None:
 
     # 初始化日志（必须在所有其他操作之前）
     runtime = resolve_runtime_config(Path(__file__).resolve().parent.parent)
+    require_managed_storage_mount(runtime.workspace_dir)
     runtime.workspace_dir.mkdir(parents=True, exist_ok=True)
     log_file = runtime.workspace_dir / "autodl-setup.log"
     setup_logger(log_file, debug=args.debug)
 
-    # setup 动作时清除网络状态缓存，确保走完整初始化流程
-    # 其他动作以及独立 CLI（model download）则复用缓存
+    # Only mutating setup initializes networking. Read-only commands and stop
+    # must never start a proxy merely to discover current state.
     if args.action == "setup":
         invalidate_network_cache()
-
-    # 初始化网络环境 (代理 + 镜像 + Token)
-    setup_network()
+        setup_network()
 
     # 创建上下文并执行
     # start/stop 需要加载 setup 阶段持久化的 artifacts

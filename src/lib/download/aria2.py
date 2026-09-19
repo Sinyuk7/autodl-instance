@@ -267,18 +267,50 @@ class Aria2Strategy(DownloadStrategy):
 
     # ── 缓存管理 ─────────────────────────────────────────────
     #
-    # aria2 不产生持久化缓存目录:
-    # - --disk-cache 是内存缓存，进程结束即释放
-    # - .aria2 控制文件与下载文件同目录，用于断点续传，下载完成后自动删除
-    #
-    # 因此 cache_info() 和 purge_cache() 均返回空，
-    # 保留接口以便未来添加其他有缓存的策略（如 HuggingFace Hub）
+    # Completed downloads are user-managed staging files, not cache.  Only
+    # files accompanied by an aria2 control file are incomplete cache entries.
+
+    @staticmethod
+    def _downloads_dir() -> Path | None:
+        value = os.environ.get("AUTODL_DOWNLOADS_DIR")
+        return Path(value) if value else None
+
+    @staticmethod
+    def _entry_size(control_file: Path) -> int:
+        partial_file = Path(str(control_file)[:-len(".aria2")])
+        return control_file.stat().st_size + (
+            partial_file.stat().st_size if partial_file.exists() else 0
+        )
 
     def cache_info(self) -> List[CacheEntry]:
-        """aria2 无持久化缓存目录，返回空列表"""
-        return []
+        """List resumable partial downloads without treating completed files as cache."""
+        root = self._downloads_dir()
+        if root is None or not root.exists():
+            return []
+        return [
+            CacheEntry(
+                name=f"aria2 partial: {control.relative_to(root)}",
+                path=control,
+                size_bytes=self._entry_size(control),
+                exists=True,
+            )
+            for control in sorted(root.rglob("*.aria2"))
+        ]
 
     def purge_cache(self) -> List[PurgeResult]:
-        """aria2 无持久化缓存，返回空列表"""
-        return []
+        """Delete only interrupted downloads that still have an .aria2 marker."""
+        results: List[PurgeResult] = []
+        root = self._downloads_dir()
+        if root is None or not root.exists():
+            return results
 
+        for control in sorted(root.rglob("*.aria2")):
+            partial = Path(str(control)[:-len(".aria2")])
+            size = self._entry_size(control)
+            try:
+                control.unlink(missing_ok=True)
+                partial.unlink(missing_ok=True)
+                results.append(PurgeResult(str(partial), size, True))
+            except OSError as exc:
+                results.append(PurgeResult(str(partial), 0, False, str(exc)))
+        return results

@@ -52,12 +52,12 @@ them with `git status` and `git diff`; do not reset them.
 
 ## Next implementation order
 
-1. Create a compressed, verifiable backup of current ComfyUI user data and
-   local configuration on `/root/autodl-fs`. Do not include secrets in logs.
-2. Create `/root/autodl-tmp/comfyui-workspace/user` and `output`, migrate with
+1. Create `/root/autodl-tmp/comfyui-workspace/user` and `output`, migrate with
    conflict preservation, then link `/root/ComfyUI/user` and `output`.
-3. Identify the orphan model type, create `/root/autodl-tmp/models/<type>`,
+2. Identify the orphan model type, create `/root/autodl-tmp/models/<type>`,
    migrate it, and link `/root/ComfyUI/models`.
+3. Review and repair `autodl init` and `autodl setup`; proxy startup must use
+   absolute paths under the configured `workspace_data_dir/mihomo` directory.
 4. Create a dedicated ComfyUI Python environment on the system disk only after
    checking free space. Avoid duplicating CUDA/Torch packages until the target
    environment and GPU mode are confirmed.
@@ -66,7 +66,7 @@ them with `git status` and `git diff`; do not reset them.
 
 ## Explicitly deferred
 
-- No backup, migration, symlink creation, package installation, or environment
-  creation was performed before restart.
+- No migration, symlink creation, package installation, or environment creation
+  was performed before restart.
 - No setup/start/stop lifecycle command was run.
 - No commit or push was performed.

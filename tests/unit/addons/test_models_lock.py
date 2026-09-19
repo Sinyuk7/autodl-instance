@@ -214,7 +214,7 @@ class TestGenerateSnapshotTask:
     """GenerateSnapshotTask 路径与 lock.py 复用行为"""
 
     def test_writes_git_visible_lock_and_preserves_meta(self, app_context, tmp_path: Path):
-        """sync 产物应写到 my-comfyui-backup/model-lock.yaml 并保留 .meta 来源"""
+        """model lock 应写到 workspace 数据目录并保留 .meta 来源。"""
         project_root = tmp_path / "repo"
         project_root.mkdir()
         models = tmp_path / "models"

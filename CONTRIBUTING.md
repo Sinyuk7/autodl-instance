@@ -37,15 +37,14 @@
 
 - 非敏感配置写入 `~/.config/autodl-instance/config.yaml`
 - 敏感配置写入 `~/.config/autodl-instance/secrets.yaml`
-- 数据仓库不保存 secrets
+- 项目不提供 ComfyUI 数据或代理配置的 Git 备份流程
 - 环境变量优先级高于本机配置
 
 常用命令：
 
 ```bash
-autodl config set userdata-repo git@github.com:user/my-comfyui-backup.git
-autodl config set git-user-name "Your Name"
 autodl secrets set hf-token
+autodl secrets set mihomo-subscription-url
 ```
 
 ### Package 默认配置

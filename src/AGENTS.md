@@ -33,8 +33,7 @@ Hardcoded execution order (setup):
 2. `torch_engine` - PyTorch CUDA setup
 3. `comfy_core` - ComfyUI installation
 4. `workspace` - Local persistent working data
-5. `nodes` - Custom nodes management
-6. `models` - Model download/management
+5. `models` - Model storage migration and layout
 
 ## CONVENTIONS
 

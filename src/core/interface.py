@@ -52,6 +52,10 @@ class AppContext:
     workspace_dir: Optional[Path] = None
     workspace_data_dir: Optional[Path] = None
     models_dir: Optional[Path] = None
+    output_dir: Optional[Path] = None
+    downloads_dir: Optional[Path] = None
+    cache_dir: Optional[Path] = None
+    temp_dir: Optional[Path] = None
     config_file: Optional[Path] = None
     local_config: Dict[str, Any] = field(default_factory=lambda: {})
 
@@ -65,6 +69,14 @@ class AppContext:
             self.workspace_data_dir = self.base_dir / "comfyui-workspace"
         if self.models_dir is None:
             self.models_dir = self.base_dir / "models"
+        if self.output_dir is None:
+            self.output_dir = self.workspace_data_dir / "output"
+        if self.downloads_dir is None:
+            self.downloads_dir = self.base_dir / "ComfyUI" / "downloads"
+        if self.cache_dir is None:
+            self.cache_dir = self.base_dir / "ComfyUI" / "cache"
+        if self.temp_dir is None:
+            self.temp_dir = self.base_dir / "ComfyUI" / "temp"
 
 
 # 兼容别名

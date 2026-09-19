@@ -107,6 +107,9 @@ class MihomoBackend(ProxyBackend):
             logger.error(f"  -> ✗ 配置文件不存在: {self._config_file}")
             return False
 
+        if not self._validate_config():
+            return False
+
         # 如果已经在运行，先停止
         if self.is_running():
             logger.info("  -> mihomo 已在运行，正在重启...")
@@ -119,42 +122,37 @@ class MihomoBackend(ProxyBackend):
             # 确保配置目录存在 (日志文件需要)
             self.config.config_dir.mkdir(parents=True, exist_ok=True)
 
-            # 日志输出到文件，便于排障
-            log_f = open(self._log_file, "a", encoding="utf-8")
-
-            process = subprocess.Popen(
-                [
-                    str(self._bin_path),
-                    "-f", str(self._config_file),
-                    "-d", str(self.config.config_dir),
-                ],
-                stdout=log_f,
-                stderr=log_f,
-                start_new_session=True,
-            )
+            # Both paths are absolute and independent of the caller's cwd.
+            with open(self._log_file, "a", encoding="utf-8") as log_f:
+                process = subprocess.Popen(
+                    [
+                        str(self._bin_path.resolve()),
+                        "-d", str(self.config.config_dir.resolve()),
+                        "-f", str(self._config_file.resolve()),
+                    ],
+                    stdout=log_f,
+                    stderr=log_f,
+                    start_new_session=True,
+                )
 
             # 记录 PID
             self._pid_file.write_text(str(process.pid))
 
-            # 通过端口探测确认启动完成
-            if not _wait_for_port(self.config.proxy_port, timeout=15):
+            # Both listeners are part of the configured service contract.
+            proxy_ready = _wait_for_port(self.config.proxy_port, timeout=15)
+            api_ready = proxy_ready and _wait_for_port(self.config.api_port, timeout=5)
+            if not (proxy_ready and api_ready):
                 if process.poll() is not None:
-                    # 进程已退出，输出日志帮助排障
-                    log_tail = ""
-                    try:
-                        log_f.flush()
-                        lines = self._log_file.read_text(encoding="utf-8").strip().splitlines()
-                        log_tail = "\n".join(lines[-10:])  # 最后 10 行
-                    except Exception:
-                        pass
                     logger.error(
                         f"  -> ✗ mihomo 启动后退出 (code={process.returncode}), "
                         f"请查看日志: {self._log_file}"
                     )
-                    if log_tail:
-                        logger.error(f"  -> 日志尾部:\n{log_tail}")
-                    return False
-                logger.warning("  -> [WARN] mihomo 进程已启动但代理端口尚未就绪")
+                else:
+                    logger.error(
+                        "  -> ✗ mihomo 进程存在但本地代理/API 端口未就绪，正在停止"
+                    )
+                    self.stop()
+                return False
 
             logger.info(
                 f"  -> ✓ mihomo 已启动 (PID: {process.pid}, "
@@ -174,6 +172,22 @@ class MihomoBackend(ProxyBackend):
             self._pid_file.unlink(missing_ok=True)
             logger.info("  -> mihomo 无 PID 记录，视为已停止")
             return True
+
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            self._pid_file.unlink(missing_ok=True)
+            logger.info("  -> mihomo 进程不存在，已清理 PID 文件")
+            return True
+        except PermissionError:
+            logger.error(f"  -> ✗ 无权检查 mihomo PID: {pid}")
+            return False
+
+        if not self._process_matches(pid):
+            logger.error(
+                f"  -> ✗ PID {pid} 不属于当前 mihomo 配置，拒绝停止"
+            )
+            return False
 
         try:
             os.kill(pid, _SIGTERM)
@@ -205,13 +219,13 @@ class MihomoBackend(ProxyBackend):
             return False
 
     def is_running(self) -> bool:
-        """检查 mihomo 进程是否在运行"""
+        """检查 PID 是否仍是由当前绝对路径配置启动的 mihomo。"""
         pid = self._read_pid()
         if pid is None:
             return False
         try:
             os.kill(pid, 0)
-            return True
+            return self._process_matches(pid)
         except (ProcessLookupError, PermissionError):
             return False
 
@@ -289,6 +303,60 @@ class MihomoBackend(ProxyBackend):
         if not self._pid_file.exists():
             return None
         try:
-            return int(self._pid_file.read_text().strip())
+            pid = int(self._pid_file.read_text().strip())
+            return pid if pid > 0 else None
         except (ValueError, IOError):
             return None
+
+    def _validate_config(self) -> bool:
+        """Run mihomo's config test with the exact production paths."""
+        command = [
+            str(self._bin_path.resolve()),
+            "-t",
+            "-d", str(self.config.config_dir.resolve()),
+            "-f", str(self._config_file.resolve()),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.error(f"  -> ✗ mihomo 配置检查无法执行: {exc}")
+            return False
+        if result.returncode != 0:
+            logger.error(
+                f"  -> ✗ mihomo 配置检查失败，请检查: {self._config_file}"
+            )
+            return False
+        logger.info("  -> ✓ mihomo 配置检查通过")
+        return True
+
+    def _process_matches(self, pid: int) -> bool:
+        """Verify executable and exact -d/-f arguments before managing a PID."""
+        proc_dir = Path("/proc") / str(pid)
+        try:
+            executable = (proc_dir / "exe").resolve(strict=True)
+            expected_executable = self._bin_path.resolve(strict=True)
+            argv = (proc_dir / "cmdline").read_bytes().split(b"\0")
+            arguments = [item.decode("utf-8", errors="surrogateescape") for item in argv if item]
+        except (FileNotFoundError, OSError):
+            return False
+
+        expected_dir = str(self.config.config_dir.resolve())
+        expected_file = str(self._config_file.resolve())
+
+        def has_option(option: str, value: str) -> bool:
+            return any(
+                arguments[index] == option and arguments[index + 1] == value
+                for index in range(len(arguments) - 1)
+            )
+
+        return (
+            executable == expected_executable
+            and has_option("-d", expected_dir)
+            and has_option("-f", expected_file)
+        )

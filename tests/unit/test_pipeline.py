@@ -6,7 +6,7 @@ from src.main import create_pipeline, execute
 from src.core.results import PluginResult
 
 
-PLUGIN_NAMES = ["system", "torch_engine", "comfy_core", "workspace", "nodes", "models"]
+PLUGIN_NAMES = ["system", "torch_engine", "comfy_core", "workspace", "models"]
 
 
 def test_create_pipeline_returns_current_order():
@@ -46,7 +46,7 @@ def test_stop_collects_failures_and_continues(app_context):
 
 def test_stop_records_plugin_warning(app_context):
     addon = MagicMock()
-    addon.name = "nodes"
+    addon.name = "example"
     addon.stop = MagicMock(return_value=PluginResult.warning("snapshot failed"))
     with patch("src.main.create_pipeline", return_value=[addon]):
         result = execute("stop", app_context)

@@ -84,7 +84,7 @@ def main():
 │  ├─────────────────────────────┴─────────────────────────────────┤ │
 │  │               artifacts: Artifacts (强类型 DTO)               │ │
 │  │  ┌─────────────────────────────────────────────────────────┐  │ │
-│  │  │ comfy_dir | custom_nodes_dir | models_dir | proxy_url  │  │ │
+│  │  │ comfy_dir | user_dir | models_dir | proxy_url          │  │ │
 │  │  │ uv_bin    | torch_installed  | cuda_version | ...       │  │ │
 │  │  └─────────────────────────────────────────────────────────┘  │ │
 │  └───────────────────────────────────────────────────────────────┘ │
@@ -178,16 +178,13 @@ def execute(action, context, until, only):
                           │              │   ← 依赖 uv_bin
                           └──────┬───────┘
                                  │ artifacts.comfy_dir
-                                 │ artifacts.custom_nodes_dir
                                  │ artifacts.user_dir
-                    ┌────────────┼────────────┐
-                    ▼            ▼            ▼
-           ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-           │UserdataAddon │ │ NodesAddon   │ │ ModelAddon   │
-           │⑤ 用户数据    │ │⑥ 自定义节点  │ │⑦ 模型管理    │
-           │← comfy_dir   │ │← comfy_dir   │ │← comfy_dir   │
-           └──────────────┘ │← user_dir    │ └──────────────┘
-                            └──────────────┘
+                         ┌───────┴────────┐
+                         ▼                ▼
+                ┌──────────────┐ ┌──────────────┐
+                │WorkspaceAddon│ │ ModelAddon   │
+                │⑤ 数据迁移    │ │⑥ 模型布局    │
+                └──────────────┘ └──────────────┘
 ```
 
 ---
@@ -258,9 +255,8 @@ return [
     GitAddon(),       # ② 无依赖
     TorchAddon(),     # ③ 无依赖
     ComfyAddon(),     # ④ 依赖 ① (uv_bin)
-    UserdataAddon(),  # ⑤ 依赖 ④ (comfy_dir)
-    NodesAddon(),     # ⑥ 依赖 ④ (comfy_dir, user_dir)
-    ModelAddon(),     # ⑦ 依赖 ④ (comfy_dir)
+    WorkspaceAddon(), # ⑤ 依赖 ④ (comfy_dir)
+    ModelAddon(),     # ⑥ 依赖 ④ (comfy_dir)
 ]
 ```
 
@@ -282,9 +278,8 @@ src/
 │   ├── git_config/         # ② Git/SSH 配置
 │   ├── torch_engine/       # ③ PyTorch CUDA
 │   ├── comfy_core/         # ④ ComfyUI 核心安装
-│   ├── userdata/           # ⑤ 用户数据软链接
-│   ├── nodes/              # ⑥ 自定义节点管理
-│   └── models/             # ⑦ 模型目录管理
+│   ├── workspace/          # ⑤ 用户数据迁移与软链接
+│   └── models/             # ⑥ 模型目录管理
 └── lib/                    # 可复用库
     ├── download/           # 策略模式下载器
     ├── network/            # 代理 & 镜像管理

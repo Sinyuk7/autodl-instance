@@ -3,12 +3,11 @@ Models Addon - ComfyUI 模型目录管理
 
 基于 Task Subsystem 的实现：
 - Setup: SetupModelsSymlinkTask, MigrateExistingModelsTask
-- Sync: CheckOrphanFilesTask, CleanupOrphanMetasTask, GenerateSnapshotTask
 """
 from pathlib import Path
 
 from src.core.interface import BaseAddon, AppContext, hookimpl
-from src.core.results import PluginResult
+from src.core.runtime import require_managed_storage_mount
 from src.core.task import TaskRunner
 from src.core.utils import logger
 
@@ -18,7 +17,6 @@ class ModelAddon(BaseAddon):
     
     核心职责：
     1. Setup: 将 ComfyUI/models/ 软链接到数据盘 (autodl-tmp/models/)
-    2. Sync: 检查软链接状态，迁移残留文件，生成模型快照
     """
     
     module_dir = "models"
@@ -30,13 +28,6 @@ class ModelAddon(BaseAddon):
         "SetupModelsSymlinkTask",
     ]
     
-    # Sync 阶段 Task 列表 (按 priority 顺序)
-    SYNC_TASKS = [
-        "CheckOrphanFilesTask",
-        "CleanupOrphanMetasTask",
-        "GenerateSnapshotTask",
-    ]
-
     def _get_target_models_dir(self, ctx: AppContext) -> Path:
         """获取数据盘上的模型目录路径"""
         return ctx.models_dir or (ctx.base_dir / self.MODELS_DIR_NAME)
@@ -60,6 +51,7 @@ class ModelAddon(BaseAddon):
             return
 
         target_models = self._get_target_models_dir(ctx)
+        require_managed_storage_mount(target_models)
         logger.info(f"  -> 目标模型目录: {target_models}")
 
         # 运行 Setup Tasks
@@ -88,40 +80,6 @@ class ModelAddon(BaseAddon):
         pass
 
     @hookimpl
-    def stop(self, context: AppContext) -> PluginResult:
-        """同步钩子：运行 Sync 阶段 Task"""
-        logger.info("\n>>> [Models] 开始同步模型数据...")
-
-        models_dir = context.artifacts.models_dir
-        if not models_dir:
-            models_dir = self._get_target_models_dir(context)
-        
-        if not models_dir.exists():
-            logger.warning("  -> [WARN] 模型目录不存在，跳过")
-            return PluginResult.warning(
-                f"模型目录不存在: {models_dir}",
-                "请先运行 autodl setup，确认 ComfyUI/models 已软链接到数据盘",
-            )
-
-        # 运行 Sync Tasks
-        from src.addons.models.tasks import (
-            CheckOrphanFilesTask,
-            CleanupOrphanMetasTask,
-            GenerateSnapshotTask,
-        )
-        
-        ok = TaskRunner.run_tasks(
-            tasks=[
-                CheckOrphanFilesTask(),
-                CleanupOrphanMetasTask(),
-                GenerateSnapshotTask(),
-            ],
-            ctx=context,
-            addon_name="Models"
-        )
-        if not ok:
-            return PluginResult.failure(
-                "模型同步任务失败，model-lock.yaml 可能没有更新",
-                "请查看 /root/autodl-tmp/autodl-workspace/autodl-setup.log，修复后重新运行 stop",
-            )
-        return PluginResult.success("模型数据同步完成")
+    def stop(self, context: AppContext) -> None:
+        """Stopping ComfyUI must not scan, migrate, or snapshot model data."""
+        return None

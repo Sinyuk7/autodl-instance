@@ -39,8 +39,8 @@ class SetupModelsSymlinkTask(BaseTask):
                 logger.info(f"  -> models 软链接已就绪 → {target_models}")
                 return False
 
-            logger.warning("  -> models 软链接指向错误，重建...")
-            comfy_models.unlink()
+            logger.error("  -> [ERROR] models 软链接指向错误，拒绝自动改写")
+            return False
         elif comfy_models.is_dir():
             if any(comfy_models.iterdir()):
                 logger.warning("  -> [SKIP] models 物理目录仍有内容，拒绝覆盖")

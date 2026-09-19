@@ -15,19 +15,28 @@ from src.core.runtime import (
     DEFAULT_BASE_DIR,
     DEFAULT_COMFY_DIR,
     DEFAULT_CONFIG_FILE,
-    DEFAULT_MODELS_NAME,
+    DEFAULT_CACHE_DIR,
+    DEFAULT_DOWNLOADS_DIR,
+    DEFAULT_MODELS_DIR,
+    DEFAULT_OUTPUT_DIR,
     DEFAULT_SECRETS_FILE,
     SECRET_KEY_ALIASES,
     DEFAULT_WORKSPACE_DATA_NAME,
     DEFAULT_WORKSPACE_NAME,
+    DEFAULT_TEMP_DIR,
+    configure_cache_environment,
     normalize_config_key,
     normalize_secret_key,
+    require_managed_storage_mount,
     resolve_runtime_config,
 )
 from src.lib.utils import load_yaml, save_yaml
 
 
-PATH_CONFIG_KEYS = {"base_dir", "workspace_dir", "workspace_data_dir", "comfy_dir", "models_dir"}
+PATH_CONFIG_KEYS = {
+    "base_dir", "workspace_dir", "workspace_data_dir", "comfy_dir",
+    "models_dir", "output_dir", "downloads_dir", "cache_dir", "temp_dir",
+}
 CONFIG_SET_KEYS = tuple(CONFIG_KEY_ALIASES.keys())
 SECRET_SET_KEYS = tuple(SECRET_KEY_ALIASES.keys())
 
@@ -61,7 +70,16 @@ def _write_init_config(args: argparse.Namespace) -> None:
     base_dir = args.base_dir
     workspace_dir = args.workspace_dir or (base_dir / DEFAULT_WORKSPACE_NAME)
     workspace_data_dir = args.workspace_data_dir or (base_dir / DEFAULT_WORKSPACE_DATA_NAME)
-    models_dir = args.models_dir or (base_dir / DEFAULT_MODELS_NAME)
+    models_dir = args.models_dir or DEFAULT_MODELS_DIR
+    output_dir = args.output_dir or DEFAULT_OUTPUT_DIR
+    downloads_dir = args.downloads_dir or DEFAULT_DOWNLOADS_DIR
+    cache_dir = args.cache_dir or DEFAULT_CACHE_DIR
+    temp_dir = args.temp_dir or DEFAULT_TEMP_DIR
+
+    require_managed_storage_mount(
+        base_dir, workspace_dir, workspace_data_dir, models_dir, output_dir,
+        downloads_dir, cache_dir, temp_dir,
+    )
 
     data = {
         "base_dir": str(base_dir),
@@ -69,6 +87,10 @@ def _write_init_config(args: argparse.Namespace) -> None:
         "workspace_data_dir": str(workspace_data_dir),
         "comfy_dir": str(args.comfy_dir),
         "models_dir": str(models_dir),
+        "output_dir": str(output_dir),
+        "downloads_dir": str(downloads_dir),
+        "cache_dir": str(cache_dir),
+        "temp_dir": str(temp_dir),
     }
 
     config_file = args.config_file
@@ -76,9 +98,26 @@ def _write_init_config(args: argparse.Namespace) -> None:
 
     workspace_dir.mkdir(parents=True, exist_ok=True)
     workspace_data_dir.parent.mkdir(parents=True, exist_ok=True)
+    for directory in (models_dir, output_dir, downloads_dir, cache_dir, temp_dir):
+        directory.mkdir(parents=True, exist_ok=True)
     print(f"配置已写入: {config_file}")
     print(f"workspace_dir: {workspace_dir}")
     print(f"workspace_data_dir: {workspace_data_dir}")
+    print(f"models_dir: {models_dir}")
+    print(f"output_dir: {output_dir}")
+    print(f"downloads_dir: {downloads_dir}")
+    print(f"cache_dir: {cache_dir}")
+    print(f"temp_dir: {temp_dir}")
+
+
+def _dispatch_init(args: argparse.Namespace) -> None:
+    """Persist runtime paths, then bring up the configured network backend."""
+    _write_init_config(args)
+
+    from src.lib.network import invalidate_network_cache, setup_network
+
+    invalidate_network_cache()
+    setup_network(config_file=args.config_file)
 
 
 def _dispatch_config(args: argparse.Namespace) -> None:
@@ -173,6 +212,12 @@ def _dispatch_status(command: str, argv: Sequence[str]) -> None:
 
 
 def _dispatch_model(argv: Sequence[str]) -> None:
+    runtime = resolve_runtime_config(_code_root())
+    require_managed_storage_mount(runtime.models_dir, runtime.downloads_dir, runtime.cache_dir)
+    runtime.downloads_dir.mkdir(parents=True, exist_ok=True)
+    runtime.cache_dir.mkdir(parents=True, exist_ok=True)
+    configure_cache_environment(runtime)
+
     from src.addons.models.downloader import main as model_main
 
     original_argv = sys.argv[:]
@@ -201,6 +246,10 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--workspace-data-dir", type=Path)
     init.add_argument("--comfy-dir", type=Path, default=DEFAULT_COMFY_DIR)
     init.add_argument("--models-dir", type=Path)
+    init.add_argument("--output-dir", type=Path)
+    init.add_argument("--downloads-dir", type=Path)
+    init.add_argument("--cache-dir", type=Path)
+    init.add_argument("--temp-dir", type=Path)
     init.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
 
     config = sub.add_parser("config", help="manage non-sensitive local config")
@@ -251,7 +300,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.command == "init":
-        _write_init_config(args)
+        _dispatch_init(args)
         return
 
     if args.command == "config":

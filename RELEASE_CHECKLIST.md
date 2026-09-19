@@ -39,11 +39,12 @@ uv tool install dist/autodl_instance-0.1.0-py3-none-any.whl  # 本地 wheel
 uv tool install https://github.com/<org>/autodl-instance/releases/download/v0.1.0/autodl_instance-0.1.0-py3-none-any.whl  # GitHub Release
 
 # 2. 配置
-autodl init --base-dir /root/autodl-tmp --userdata-repo <repo-url>
+autodl init --base-dir /root/autodl-tmp
 
 # 3. 设置 secrets
-autodl secrets set HF_TOKEN
-autodl secrets set CIVITAI_API_TOKEN
+autodl secrets set hf-token
+autodl secrets set civitai-token
+autodl secrets set mihomo-subscription-url
 
 # 4. 执行 setup
 autodl setup

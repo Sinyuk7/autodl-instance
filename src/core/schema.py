@@ -27,10 +27,6 @@ class StateKey(str, Enum):
     # ComfyAddon
     COMFY_INSTALLED = "comfy_core_installed"
     
-    # NodesAddon
-    NODES_RESTORED = "nodes_restored"
-    
-    
     # ModelAddon
     EXTRA_PATHS_CONFIGURED = "extra_paths_configured"
 

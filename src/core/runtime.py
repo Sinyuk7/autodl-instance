@@ -2,8 +2,8 @@
 Runtime path and config helpers.
 
 This module is the single place that translates install-time code resources,
-AutoDL data-disk paths, user configuration, and data-repo metadata into the
-paths used by the rest of the app.
+AutoDL storage paths, and local user configuration into the paths used by the
+rest of the app.
 """
 import importlib.metadata
 import os
@@ -21,21 +21,27 @@ DEFAULT_BASE_DIR = Path("/root/autodl-tmp")
 DEFAULT_COMFY_DIR = Path("/root/ComfyUI")
 DEFAULT_WORKSPACE_NAME = "autodl-workspace"
 DEFAULT_WORKSPACE_DATA_NAME = "comfyui-workspace"
-DEFAULT_MODELS_NAME = "models"
+DEFAULT_LOCAL_COMFY_DIR = DEFAULT_BASE_DIR / "ComfyUI"
+DEFAULT_SHARED_COMFY_DIR = Path("/root/autodl-fs/ComfyUI")
+DEFAULT_MODELS_DIR = DEFAULT_SHARED_COMFY_DIR / "models"
+DEFAULT_OUTPUT_DIR = DEFAULT_SHARED_COMFY_DIR / "output"
+DEFAULT_DOWNLOADS_DIR = DEFAULT_LOCAL_COMFY_DIR / "downloads"
+DEFAULT_CACHE_DIR = DEFAULT_LOCAL_COMFY_DIR / "cache"
+DEFAULT_TEMP_DIR = DEFAULT_LOCAL_COMFY_DIR / "temp"
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / PACKAGE_NAME
 DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.yaml"
 DEFAULT_SECRETS_FILE = DEFAULT_CONFIG_DIR / "secrets.yaml"
-DATA_REPO_META_DIR = ".autodl-instance"
-DATA_REPO_SCHEMA_VERSION_FILE = "data-schema-version"
-DATA_REPO_TOOL_VERSION_FILE = "tool-version"
-DATA_REPO_SCHEMA_VERSION = "1"
-
+MANAGED_STORAGE_ROOTS = (Path("/root/autodl-tmp"), Path("/root/autodl-fs"))
 CONFIG_KEY_ALIASES = {
     "base-dir": "base_dir",
     "workspace-dir": "workspace_dir",
     "workspace-data-dir": "workspace_data_dir",
     "comfy-dir": "comfy_dir",
     "models-dir": "models_dir",
+    "output-dir": "output_dir",
+    "downloads-dir": "downloads_dir",
+    "cache-dir": "cache_dir",
+    "temp-dir": "temp_dir",
 }
 
 SECRET_KEY_ALIASES = {
@@ -55,10 +61,47 @@ class RuntimeConfig:
     workspace_data_dir: Path
     comfy_dir: Path
     models_dir: Path
+    output_dir: Path
+    downloads_dir: Path
+    cache_dir: Path
+    temp_dir: Path
     config_file: Path
     secrets_file: Path
     local_config: Dict[str, Any]
     local_secrets: Dict[str, Any]
+
+
+def require_managed_storage_mount(*paths: Path) -> None:
+    """Refuse writes below known AutoDL storage roots when their mount is absent."""
+    for path in paths:
+        resolved_path = path.expanduser().resolve()
+        for configured_root in MANAGED_STORAGE_ROOTS:
+            root = configured_root.resolve()
+            if resolved_path != root and root not in resolved_path.parents:
+                continue
+            if not configured_root.is_mount():
+                raise RuntimeError(
+                    f"AutoDL storage is not mounted: {configured_root}; "
+                    f"refusing to write {resolved_path}"
+                )
+            break
+
+
+def configure_cache_environment(config: RuntimeConfig) -> None:
+    """Route rebuildable package and model-download caches to the local data disk."""
+    cache_dir = config.cache_dir
+    values = {
+        "XDG_CACHE_HOME": cache_dir,
+        "UV_CACHE_DIR": cache_dir / "uv",
+        "PIP_CACHE_DIR": cache_dir / "pip",
+        "HF_HOME": cache_dir / "huggingface",
+        "HF_HUB_CACHE": cache_dir / "huggingface" / "hub",
+        "HF_XET_CACHE": cache_dir / "huggingface" / "xet",
+        "TORCH_HOME": cache_dir / "torch",
+        "AUTODL_DOWNLOADS_DIR": config.downloads_dir,
+    }
+    for key, value in values.items():
+        os.environ[key] = str(value)
 
 
 def get_tool_version() -> str:
@@ -128,7 +171,27 @@ def resolve_runtime_config(
         _expand_path(os.environ.get("AUTODL_MODELS_DIR"))
         or _expand_path(os.environ.get("COMFYUI_MODELS_DIR"))
         or _expand_path(config.get("models_dir"))
-        or (base_dir / DEFAULT_MODELS_NAME)
+        or DEFAULT_MODELS_DIR
+    )
+    output_dir = (
+        _expand_path(os.environ.get("AUTODL_OUTPUT_DIR"))
+        or _expand_path(config.get("output_dir"))
+        or DEFAULT_OUTPUT_DIR
+    )
+    downloads_dir = (
+        _expand_path(os.environ.get("AUTODL_DOWNLOADS_DIR"))
+        or _expand_path(config.get("downloads_dir"))
+        or DEFAULT_DOWNLOADS_DIR
+    )
+    cache_dir = (
+        _expand_path(os.environ.get("AUTODL_CACHE_DIR"))
+        or _expand_path(config.get("cache_dir"))
+        or DEFAULT_CACHE_DIR
+    )
+    temp_dir = (
+        _expand_path(os.environ.get("AUTODL_TEMP_DIR"))
+        or _expand_path(config.get("temp_dir"))
+        or DEFAULT_TEMP_DIR
     )
 
     return RuntimeConfig(
@@ -138,6 +201,10 @@ def resolve_runtime_config(
         workspace_data_dir=workspace_data_dir,
         comfy_dir=comfy_dir,
         models_dir=models_dir,
+        output_dir=output_dir,
+        downloads_dir=downloads_dir,
+        cache_dir=cache_dir,
+        temp_dir=temp_dir,
         config_file=config_file,
         secrets_file=secrets_file,
         local_config=config,

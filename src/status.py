@@ -140,13 +140,6 @@ def collect_quick_checks(
     else:
         checks.append(StatusCheck("model-lock", "WARN", f"未找到: {lock_file}"))
 
-    snapshots_dir = data_dir / "user" / "__manager" / "snapshots"
-    snapshots = sorted(snapshots_dir.glob("*_snapshot.json")) if snapshots_dir.exists() else []
-    if snapshots:
-        checks.append(StatusCheck("node snapshot", "OK", snapshots[-1].name))
-    else:
-        checks.append(StatusCheck("node snapshot", "WARN", f"未找到 snapshot: {snapshots_dir}"))
-
     return checks
 
 
@@ -197,10 +190,12 @@ def collect_doctor_checks(
     except OSError as e:
         checks.append(StatusCheck("data disk", "WARN", f"无法读取磁盘空间: {e}"))
 
+    cache_root = getattr(_RUNTIME, "cache_dir", base_dir / "ComfyUI" / "cache")
     for cache_dir in [
-        Path.home() / ".cache" / "huggingface",
-        Path.home() / ".cache" / "torch",
-        Path.home() / ".cache" / "uv",
+        cache_root / "huggingface",
+        cache_root / "torch",
+        cache_root / "uv",
+        cache_root / "pip",
     ]:
         size = _dir_size(cache_dir)
         checks.append(StatusCheck(

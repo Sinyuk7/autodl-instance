@@ -10,14 +10,31 @@ from src.lib.utils import load_yaml, save_yaml
 def test_autodl_init_writes_global_config(tmp_path: Path):
     config = tmp_path / "config.yaml"
     base = tmp_path / "autodl-tmp"
+    shared = tmp_path / "autodl-fs" / "ComfyUI"
+    local = base / "ComfyUI"
 
-    main(["init", "--config-file", str(config), "--base-dir", str(base)])
+    with patch("src.lib.network.invalidate_network_cache") as invalidate, \
+         patch("src.lib.network.setup_network") as setup_network:
+        main([
+            "init", "--config-file", str(config), "--base-dir", str(base),
+            "--models-dir", str(shared / "models"),
+            "--output-dir", str(shared / "output"),
+            "--downloads-dir", str(local / "downloads"),
+            "--cache-dir", str(local / "cache"),
+            "--temp-dir", str(local / "temp"),
+        ])
 
     data = load_yaml(config)
     assert data["base_dir"] == str(base)
     assert data["workspace_dir"] == str(base / "autodl-workspace")
     assert data["workspace_data_dir"] == str(base / "comfyui-workspace")
-    assert data["models_dir"] == str(base / "models")
+    assert data["models_dir"] == str(shared / "models")
+    assert data["output_dir"] == str(shared / "output")
+    assert data["downloads_dir"] == str(local / "downloads")
+    assert data["cache_dir"] == str(local / "cache")
+    assert data["temp_dir"] == str(local / "temp")
+    invalidate.assert_called_once_with()
+    setup_network.assert_called_once_with(config_file=config)
 
 
 def test_autodl_setup_dispatches_lifecycle():

@@ -30,13 +30,8 @@ class Artifacts:
     
     # ==================== ComfyAddon ====================
     comfy_dir: Optional[Path] = None
-    custom_nodes_dir: Optional[Path] = None
     user_dir: Optional[Path] = None
     output_dir: Optional[Path] = None  # ComfyUI 产出目录（tmp 盘软链接目标）
-    
-    # ==================== NodesAddon ====================
-    snapshots_dir: Optional[Path] = None
-    latest_snapshot: Optional[Path] = None
     
     # ==================== WorkspaceAddon ====================
     workspace_data_dir: Optional[Path] = None

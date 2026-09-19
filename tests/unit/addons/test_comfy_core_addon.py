@@ -27,7 +27,6 @@ class TestSetup:
         # 验证 artifacts - comfy_dir 现在来自 context.comfy_dir（系统盘）
         comfy_dir = app_context.comfy_dir
         assert app_context.artifacts.comfy_dir == comfy_dir
-        assert app_context.artifacts.custom_nodes_dir == comfy_dir / "custom_nodes"
         assert app_context.artifacts.output_dir == app_context.workspace_data_dir / "output"
         cli_install = mock_runner.assert_called_with("comfy-cli==1.20.0")
         assert "--index-url https://pypi.org/simple" in cli_install.cmd

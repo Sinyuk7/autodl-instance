@@ -154,7 +154,6 @@ logs/
 bin/
 bin
 
-my-comfyui-backup/
 src/lib/download/docs
 
 # RAG 索引 (本地生成)

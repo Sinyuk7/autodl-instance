@@ -1,7 +1,6 @@
 """
 ComfyUI 核心安装插件
 """
-import shutil
 from pathlib import Path
 
 from src.core.interface import AppContext, BaseAddon, hookimpl
@@ -18,10 +17,6 @@ class ComfyAddon(BaseAddon):
     def _get_comfy_dir(self, ctx: AppContext) -> Path:
         """从 context 获取 ComfyUI 安装目录"""
         return ctx.comfy_dir
-
-    def _get_output_target_dir(self, ctx: AppContext) -> Path:
-        """output 目录在 tmp 盘的实际存储位置"""
-        return ctx.base_dir / "ComfyUI_output"
 
     def _is_installed(self, ctx: AppContext) -> bool:
         """Only trust a completed setup whose ComfyUI entrypoint still exists."""
@@ -96,51 +91,6 @@ class ComfyAddon(BaseAddon):
             cmd.append("--restore")
         return cmd
 
-    def _setup_output_symlink(self, ctx: AppContext, comfy_dir: Path) -> None:
-        """将 output 目录软链接到 tmp 盘
-        
-        目的：产出文件（图片/视频）可能很大，放在持久化的 tmp 盘
-        
-        注意：Windows 创建软链接需要管理员权限，测试环境下会跳过
-        """
-        import platform
-        
-        output_link = comfy_dir / "output"
-        target_dir = self._get_output_target_dir(ctx)
-        
-        # 确保目标目录存在
-        target_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 幂等检查：已是正确软链接则跳过
-        if output_link.is_symlink():
-            if output_link.resolve() == target_dir.resolve():
-                logger.info(f"  -> output 软链接已就绪 → {target_dir}")
-                return
-            else:
-                # 软链接指向错误位置，删除重建
-                output_link.unlink()
-        
-        # 如果 output 是真实目录，先迁移内容再删除
-        if output_link.exists() and output_link.is_dir():
-            logger.info(f"  -> 迁移 output 内容到 {target_dir}...")
-            for item in output_link.iterdir():
-                dest = target_dir / item.name
-                if not dest.exists():
-                    shutil.move(str(item), str(dest))
-            shutil.rmtree(output_link)
-        
-        # 创建软链接（Windows 需要管理员权限，测试环境跳过）
-        try:
-            output_link.symlink_to(target_dir)
-            logger.info(f"  -> output 软链接已创建 → {target_dir}")
-        except OSError as e:
-            if platform.system() == "Windows":
-                logger.warning(f"  -> [SKIP] Windows 无法创建软链接（需管理员权限）: {e}")
-                # 确保 output 目录存在，作为 fallback
-                output_link.mkdir(parents=True, exist_ok=True)
-            else:
-                raise
-
     @hookimpl
     def setup(self, context: AppContext) -> None:
         logger.info("\n>>> [Comfy Core] 开始装配 ComfyUI 引擎...")
@@ -169,10 +119,9 @@ class ComfyAddon(BaseAddon):
         
         # 产出：供后续插件使用
         ctx.artifacts.comfy_dir = comfy_dir
-        ctx.artifacts.custom_nodes_dir = comfy_dir / "custom_nodes"
         ctx.artifacts.user_dir = comfy_dir / "user"
         workspace_data_dir = ctx.workspace_data_dir or (ctx.base_dir / "comfyui-workspace")
-        ctx.artifacts.output_dir = workspace_data_dir / "output"
+        ctx.artifacts.output_dir = ctx.output_dir or (workspace_data_dir / "output")
 
     @hookimpl
     def start(self, context: AppContext) -> None:
@@ -208,7 +157,8 @@ class ComfyAddon(BaseAddon):
         try:
             ctx.cmd.run([
                 "comfy", "--workspace", str(comfy_dir), "launch",
-                "--", "--port", str(port), "--listen", "0.0.0.0"
+                "--", "--port", str(port), "--listen", "0.0.0.0",
+                "--temp-directory", str(ctx.temp_dir),
             ], check=True, capture_output=False)
         except KeyboardInterrupt:
             logger.info("\n  -> 服务已安全关闭。")

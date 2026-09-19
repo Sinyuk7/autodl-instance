@@ -9,6 +9,7 @@ from typing import List, cast
 
 from src.core.file_migration import move_path_safely
 from src.core.interface import AppContext, BaseAddon, hookimpl
+from src.core.runtime import require_managed_storage_mount
 from src.core.utils import logger
 
 
@@ -93,12 +94,16 @@ class WorkspaceAddon(BaseAddon):
     def setup(self, context: AppContext) -> None:
         comfy_dir = context.artifacts.comfy_dir or context.comfy_dir
         data_dir = context.workspace_data_dir or (context.base_dir / "comfyui-workspace")
+        output_dir = context.output_dir or (data_dir / "output")
+        require_managed_storage_mount(data_dir, output_dir)
         data_dir.mkdir(parents=True, exist_ok=True)
         manifest = self.get_manifest(context)
         workspace_dirs = cast(List[str], manifest.get("workspace_dirs", ["user", "output"]))
         for name in workspace_dirs:
-            self._link(comfy_dir / name, data_dir / name)
+            target = output_dir if name == "output" else data_dir / name
+            self._link(comfy_dir / name, target)
         context.artifacts.workspace_data_dir = data_dir
+        context.artifacts.output_dir = output_dir
         logger.info("  -> 本地 workspace 已就绪: %s", data_dir)
 
     @hookimpl

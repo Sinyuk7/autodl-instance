@@ -26,6 +26,7 @@ from src.lib.utils import load_yaml, format_size
 # 导入本地模块
 from src.addons.models.config import (
     PRESETS_FILE,
+    get_downloads_base,
     get_models_base,
     get_available_types,
     resolve_type_to_dir,
@@ -227,7 +228,8 @@ def _write_download_meta(
 
 def cmd_download_interactive(url: str) -> None:
     """交互式下载单个模型"""
-    base = get_models_base()
+    base = get_downloads_base()
+    models_base = get_models_base()
     url_type = detect_url_type(url)
     
     # 用于存储解析结果
@@ -370,7 +372,8 @@ def cmd_download_interactive(url: str) -> None:
         "下载确认",
         f"文件名: {filename}\n"
         f"目标: {target_path}\n"
-        f"相对路径: {rel_path}"
+        f"相对路径: {rel_path}\n"
+        f"手动发布到: {models_base / rel_path}"
         + (f"\n预计大小: {size_info}" if size_info else ""),
         style="green"
     )
@@ -404,7 +407,8 @@ def cmd_download_interactive(url: str) -> None:
     # ========== Step 9: 写入 .meta sidecar ==========
     _write_download_meta(target_path, url=url, source=url_type, extra_info=civitai_info)
     
-    ui.print_success(f"下载完成: {rel_path}")
+    ui.print_success(f"下载完成（暂存）: {target_path}")
+    ui.print_info(f"确认文件后手动移动到: {models_base / rel_path}")
 
 
 # ============================================================
@@ -433,7 +437,8 @@ def cmd_download_preset(preset_name: str) -> None:
         sys.exit(1)
 
     preset = presets[matched_name]
-    base = get_models_base()
+    base = get_downloads_base()
+    models_base = get_models_base()
 
     ui.print_panel(
         f"预设: {matched_name}",
@@ -448,10 +453,12 @@ def cmd_download_preset(preset_name: str) -> None:
         name = entry.model
         rel_path = entry.primary_path
         target = base / rel_path
+        published = models_base / rel_path
 
-        # 幂等性检查：以本地文件是否存在为准
-        if target.exists():
-            ui.print_info(f"[{name}] 已存在，跳过")
+        # 正式目录或暂存目录中已有文件时均不重复下载。
+        if published.exists() or target.exists():
+            existing = published if published.exists() else target
+            ui.print_info(f"[{name}] 已存在，跳过: {existing}")
             skip_count += 1
             continue
 
@@ -469,7 +476,8 @@ def cmd_download_preset(preset_name: str) -> None:
                 # 写入 .meta sidecar（不动 model-lock.yaml）
                 _write_download_meta(target, url=entry.url, source="preset",
                                      model_name=name)
-                ui.print_success(f"[{name}] 完成")
+                ui.print_success(f"[{name}] 下载完成（暂存）: {target}")
+                ui.print_info(f"手动发布到: {published}")
                 success_count += 1
             else:
                 _print_actionable_error(

@@ -151,6 +151,12 @@ class MigrateExistingModelsTask(BaseTask):
             logger.info(f"  -> [Task] {self.name}: models 软链接已就绪，无需迁移")
             return TaskResult.SKIPPED
 
+        if comfy_models.is_symlink():
+            logger.error(
+                f"  -> [ERROR] models 软链接指向意外位置，拒绝自动改写: {comfy_models}"
+            )
+            return TaskResult.FAILED
+
         if not comfy_models.is_dir():
             logger.info(f"  -> [Task] {self.name}: 无物理目录，跳过")
             return TaskResult.SKIPPED

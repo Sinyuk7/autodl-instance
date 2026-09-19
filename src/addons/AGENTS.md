@@ -10,7 +10,6 @@ addons/
 ├── torch_engine/    # PyTorch CUDA tasks; plugin.py is currently missing
 ├── comfy_core/      # ComfyUI core lifecycle
 ├── workspace/       # Persistent user/output directory links
-├── nodes/           # Custom nodes and snapshots
 └── models/          # Model layout and management
 ```
 
@@ -43,7 +42,6 @@ class MyAddon(BaseAddon):
 | PyTorch setup | `torch_engine/manifest.yaml` and `torch_engine/tasks/`; the plugin entry point must be restored before use |
 | ComfyUI install | `comfy_core/plugin.py` - Uses `comfy-cli` |
 | Persistent workspace links | `workspace/plugin.py` - Connect system-disk ComfyUI to data-disk state |
-| Node management | `nodes/plugin.py` - ComfyUI-Manager integration |
 | Model downloads | `models/plugin.py` - HuggingFace/CivitAI handlers |
 
 ## CONVENTIONS

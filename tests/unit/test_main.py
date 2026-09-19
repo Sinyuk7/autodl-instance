@@ -188,7 +188,11 @@ class TestMain:
              patch("src.main.setup_network"), \
              patch("src.main.create_context") as mock_ctx, \
              patch("src.main.execute") as mock_exec:
-            yield {"create_context": mock_ctx, "execute": mock_exec}
+            yield {
+                "create_context": mock_ctx,
+                "execute": mock_exec,
+                "setup_network": __import__("src.main", fromlist=["setup_network"]).setup_network,
+            }
 
     @pytest.mark.parametrize("action", ["setup", "start", "stop"])
     def test_valid_actions(self, mock_dependencies, monkeypatch, action):
@@ -196,6 +200,10 @@ class TestMain:
         monkeypatch.setattr("sys.argv", ["main.py", action])
         main()
         assert mock_dependencies["execute"].call_args[0][0] == action
+        if action == "setup":
+            mock_dependencies["setup_network"].assert_called_once_with()
+        else:
+            mock_dependencies["setup_network"].assert_not_called()
 
     def test_invalid_action_rejected(self, mock_dependencies, monkeypatch):
         """无效 action 被 argparse 拒绝"""

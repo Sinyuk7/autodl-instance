@@ -45,7 +45,6 @@ class TestSetupUntilSystem:
         
         # 后续插件的产出应为 None
         assert context_with_home.artifacts.comfy_dir is None
-        assert context_with_home.artifacts.custom_nodes_dir is None
         assert context_with_home.artifacts.user_dir is None
 
 
@@ -69,12 +68,6 @@ class TestSetupUntilComfyCore:
         execute("setup", context_with_home, until="comfy_core")
         
         assert context_with_home.artifacts.comfy_dir is not None
-
-    def test_comfy_core_produces_custom_nodes_dir(self, context_with_home: AppContext):
-        """ComfyAddon 应设置 artifacts.custom_nodes_dir"""
-        execute("setup", context_with_home, until="comfy_core")
-        
-        assert context_with_home.artifacts.custom_nodes_dir is not None
 
     def test_comfy_dir_matches_context(self, context_with_home: AppContext):
         """comfy_dir 应来自 context.comfy_dir（系统盘）"""
@@ -138,7 +131,6 @@ class TestSetupFullPipeline:
         assert context_with_home.artifacts.uv_bin is not None
         assert context_with_home.artifacts.bin_dir is not None
         assert context_with_home.artifacts.comfy_dir is not None
-        assert context_with_home.artifacts.custom_nodes_dir is not None
 
     def test_full_setup_execution_log(self, context_with_home: AppContext):
         """完整 setup 应记录所有插件的执行"""
