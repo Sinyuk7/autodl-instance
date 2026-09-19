@@ -6,13 +6,12 @@
 
 ```
 addons/
-├── system/          # ① UV, cache migration to data盘
-├── git_config/      # ② Git/SSH setup
-├── torch_engine/    # ③ PyTorch CUDA installation
-├── comfy_core/      # ④ ComfyUI core install
-├── userdata/        # ⑤ User data directory symlinks
-├── nodes/           # ⑥ Custom nodes (ComfyUI-Manager)
-└── models/          # ⑦ Model download & management
+├── system/          # System tools and package tooling
+├── torch_engine/    # PyTorch CUDA tasks; plugin.py is currently missing
+├── comfy_core/      # ComfyUI core lifecycle
+├── workspace/       # Persistent user/output directory links
+├── nodes/           # Custom nodes and snapshots
+└── models/          # Model layout and management
 ```
 
 ## PLUGIN TEMPLATE
@@ -32,8 +31,8 @@ class MyAddon(BaseAddon):
     def start(self, ctx: AppContext) -> None:
         pass  # Or implement if needed
     
-    def sync(self, ctx: AppContext) -> None:
-        pass  # Or implement cleanup/persistence
+    def stop(self, ctx: AppContext) -> None:
+        pass  # Or implement owned-process cleanup/persistence
 ```
 
 ## WHERE TO LOOK
@@ -41,10 +40,9 @@ class MyAddon(BaseAddon):
 | Task | Location |
 |------|----------|
 | Install system tools | `system/plugin.py` - UV, comfy-cli, cache links |
-| Configure Git/SSH | `git_config/plugin.py` - Keys, user.name, user.email |
-| PyTorch setup | `torch_engine/plugin.py` - CUDA version detection |
+| PyTorch setup | `torch_engine/manifest.yaml` and `torch_engine/tasks/`; the plugin entry point must be restored before use |
 | ComfyUI install | `comfy_core/plugin.py` - Uses `comfy-cli` |
-| User data sync | `userdata/plugin.py` - Git push/pull for roaming |
+| Persistent workspace links | `workspace/plugin.py` - Connect system-disk ComfyUI to data-disk state |
 | Node management | `nodes/plugin.py` - ComfyUI-Manager integration |
 | Model downloads | `models/plugin.py` - HuggingFace/CivitAI handlers |
 
@@ -67,3 +65,8 @@ class MyAddon(BaseAddon):
 - Write: `ctx.artifacts.my_field = value`
 - Read: `value = ctx.artifacts.my_field`
 - Persisted automatically after setup completes
+
+**Host safety:**
+- Verify `/root/autodl-tmp` is a real data-disk mount before large writes
+- Manage only processes whose ownership is established; never kill an arbitrary port occupant
+- Keep ComfyUI Python dependencies in a dedicated environment, not AutoDL's base Conda/Jupyter environment

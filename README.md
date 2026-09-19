@@ -3,192 +3,102 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-AutoDL 云 GPU 实例上的 ComfyUI 工作环境管理器。它负责准备网络环境、安装 PyTorch 和 ComfyUI、安装默认自定义节点、持久化工作数据，以及管理模型下载。
+面向 AutoDL + ComfyUI 的运维工具集和现场知识库。
 
-> 当前项目尚未发布到 PyPI，也没有 GitHub Release。请按下方命令直接从 GitHub 安装。项目不提供远程备份或跨实例同步；数据安全仍依赖 AutoDL 数据盘和你自己的备份策略。
+这个仓库不再被视为一个可以无条件接管整台实例的“一键安装器”。它保存可审查、可重复执行的诊断和修复工具，Codex CLI 则运行在目标 AutoDL 实例上，先观察真实环境，再维护这些工具。真实主机状态始终优先于文档中的默认假设。
 
-## 在 AutoDL 上使用
+## 当前工作方式
 
-### 运行前确认
+1. 将源码 clone 到 AutoDL 系统盘 `/root/autodl-instance`。
+2. 在主机上安装 Codex CLI，让它检查磁盘、GPU、Python、ComfyUI、Mihomo、端口和现有文件。
+3. 根据现场报告，分批修改并验证本仓库的诊断或修复逻辑。
+4. 模型、输出和用户数据留在数据盘；代码和可重建环境留在系统盘。
 
-- AutoDL Linux GPU 实例，使用 `root` 用户运行。
-- Python 3.10 或更高版本。
-- 当前 Torch 配置要求 NVIDIA 驱动主版本不低于 `580`，可先执行 `nvidia-smi` 检查。
-- `/root/autodl-tmp` 是持久化数据盘，并且有足够空间存放模型和输出。
+第一轮不要直接运行完整 `setup`。先使用 [Codex AutoDL 首次现场检查](docs/CODEX_AUTODL_FIRST_TASK.md)，建立经过验证的环境基线，再决定要运行或修复哪些工具。
 
-### 1. 安装 uv 和 autodl-instance
+## 项目边界
 
-普通使用不需要先 `git clone`。安装器会直接从 GitHub 构建并安装 `autodl` 命令：
+仓库当前包含以下能力：
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source "$HOME/.local/bin/env"
-uv tool install "git+https://github.com/Sinyuk7/autodl-instance.git@main"
-autodl --help
-```
+- `autodl status` / `autodl doctor`：只读状态与环境诊断。
+- 网络工具：AutoDL 学术加速、Mihomo 进程与配置管理。
+- ComfyUI 生命周期工具：安装、启动、停止及数据目录连接。
+- PyTorch、节点和模型相关的安装或下载任务。
+- 面向真实 AutoDL 实例的测试、故障复现和运维文档。
 
-如果终端仍提示 `autodl: command not found`，重新登录终端，或执行：
+这些能力可以独立演进。现场排障不应被迫先运行整条安装流水线；任何安装或修复动作都应来自已确认的检查结果。
 
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
+## AutoDL 存储约定
 
-### 2. 初始化目录配置
-
-默认目录已经按 AutoDL 的系统盘和数据盘分好，直接初始化即可：
-
-```bash
-autodl init
-autodl config show
-```
-
-默认布局：
-
-| 内容 | 默认路径 | 说明 |
+| 内容 | 默认路径 | 策略 |
 |------|----------|------|
-| 工具配置与 secrets | `/root/.config/autodl-instance/` | 系统盘；新实例需要重新配置 |
-| 运行状态、日志和辅助命令 | `/root/autodl-tmp/autodl-workspace/` | 数据盘 |
-| ComfyUI 的 `user`、`output` | `/root/autodl-tmp/comfyui-workspace/` | 数据盘，通过软链接接入 ComfyUI |
-| 模型 | `/root/autodl-tmp/models/` | 数据盘，通过软链接接入 ComfyUI |
-| ComfyUI 程序 | `/root/ComfyUI/` | 系统盘，可由 `setup` 重建 |
+| 本仓库源码 | `/root/autodl-instance/` | 系统盘；便于 Codex 修改和 Git 管理，可重新 clone |
+| Codex 配置 | `/root/.codex/` | 系统盘；重置系统后需恢复 |
+| 工具配置与 secrets | `/root/.config/autodl-instance/` | 系统盘；不得提交到 Git |
+| ComfyUI 程序与虚拟环境 | `/root/ComfyUI/` | 系统盘；应可重建 |
+| 运行状态和日志 | `/root/autodl-tmp/autodl-workspace/` | 数据盘 |
+| ComfyUI `user`、`output` | `/root/autodl-tmp/comfyui-workspace/` | 数据盘，通过软链接接入 |
+| 模型与大型缓存 | `/root/autodl-tmp/models/` 等 | 数据盘 |
+| 压缩备份 | `/root/autodl-fs/` | 文件存储；不用于高频运行负载 |
 
-只有需要改变默认布局时才使用 `autodl config set`，例如：
+`/root/autodl-tmp` 只有在确认它确实是已挂载的数据盘后才能写入大型文件。系统重置会清空系统盘，但不会清空已挂载的数据盘；实例释放会清除实例数据。数据盘没有冗余可靠性保证，重要数据仍需另行备份。
+
+## 在 AutoDL 上准备工作副本
 
 ```bash
-autodl config set models-dir /root/autodl-tmp/models
-autodl config set comfy-dir /root/ComfyUI
+cd /root
+git clone https://github.com/Sinyuk7/autodl-instance.git
+cd /root/autodl-instance
+git status --short
 ```
 
-### 3. 配置可选凭据
-
-只使用公开模型时可以跳过。命令会交互式读取值，不会把 token 回显到终端：
+安装 Codex CLI 时使用 OpenAI 官方安装器。若 Mihomo 已在 `127.0.0.1:7890` 提供服务，可只为该命令设置代理，不修改系统全局代理：
 
 ```bash
-autodl secrets set hf-token
-autodl secrets set civitai-token
+env HTTP_PROXY=http://127.0.0.1:7890 \
+    HTTPS_PROXY=http://127.0.0.1:7890 \
+    NO_PROXY=127.0.0.1,localhost \
+    sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh'
 ```
 
-需要使用自己的 Mihomo/Clash 订阅时再配置：
+运行 Codex 时也可以采用同样的进程级代理。不要使用 `eval "$(autodl turbo)"` 作为启动 Mihomo 的必要步骤；该命令的用途是向当前 shell 导出网络变量，而不是单纯启动代理。
+
+## 现场诊断原则
+
+- 先读后写：先收集事实并报告，再进行安装、迁移或修复。
+- 不把配置文件存在等同于服务可用；必须检查进程、监听端口和真实请求。
+- 不把 `/root/autodl-tmp` 目录存在等同于数据盘已挂载。
+- 不通过 `fuser -k -9 6006/tcp` 杀死未知进程；只管理能够确认归属的服务 PID。
+- 不输出或提交 Mihomo 节点、订阅 URL、API token、SSH 私钥和 secrets。
+- 本地 `6006` 可用而公网为 AutoDL 通用 404 时，应分别记录 ComfyUI 监听状态与平台端口映射状态。
+
+## CLI 状态
+
+统一入口为 `autodl`：
 
 ```bash
-autodl secrets set mihomo-subscription-url
-```
-
-未配置 Mihomo 时，工具会优先尝试 AutoDL 自带的学术加速；两者都不可用时使用直连。
-
-### 4. 装配环境
-
-```bash
-autodl setup
-```
-
-首次执行会安装必要系统工具、检查驱动、安装锁定的 `torch 2.11.0+cu130`、`torchvision 0.26.0+cu130`、`torchaudio 2.11.0+cu130`，部署 ComfyUI `0.36.0`，建立数据盘软链接，并安装内置节点。这个过程会下载较大的依赖；重复执行会复用已有状态。
-
-安装完成后检查：
-
-```bash
+autodl --help
 autodl status
 autodl doctor
-```
-
-### 5. 启动和停止 ComfyUI
-
-```bash
+autodl setup
 autodl start
-```
-
-ComfyUI 监听 `0.0.0.0:6006`。在 AutoDL 控制台中打开实例的 6006 端口访问。`start` 默认以前台方式运行，按 `Ctrl+C` 可结束当前进程；也可以在另一个终端执行：
-
-```bash
 autodl stop
+autodl model --help
 ```
 
-停止时会尝试保存一份 ComfyUI-Manager 节点快照到数据盘。
+当前源码仍处于整理期，不能假定所有命令均可运行。已知 `src/main.py` 引用了缺失的 `src/addons/torch_engine/plugin.py`，会阻塞部分命令与测试收集。第一次现场审计应记录该问题，但不应顺手扩展成全项目重构。
 
-## 模型管理
+## 开发顺序
 
-`setup` 不会自动下载模型。可以按 URL 或内置预设下载：
+当前建议顺序是：
 
-```bash
-autodl model download https://civitai.com/models/12345
-autodl model download https://huggingface.co/owner/repo/resolve/main/model.safetensors
-autodl model download -p FLUX.2-klein-9B
-```
+1. 真实 AutoDL 环境与目录审计。
+2. 根据审计结果修正文档、默认路径和只读诊断。
+3. 恢复基本测试收集与最小可运行入口。
+4. 分项修复安装、网络、进程和数据安全问题。
+5. 对极端故障、幂等性、恢复路径和 destructive behavior 做专项 review。
 
-查看模型类型、本地文件和锁定状态：
-
-```bash
-autodl model types
-autodl model list
-autodl model status
-autodl model cache
-```
-
-`model-lock.yaml` 是本地模型状态清单，不是自动下载任务表。缺失或发生变化的模型只会在 `autodl model status` 中提示。
-
-## 手动升级 ComfyUI
-
-自动装配固定使用经过验证的 ComfyUI `0.36.0`。用户可以在当前实例上主动升级到最新稳定版：
-
-```bash
-autodl stop
-comfy --workspace /root/ComfyUI update comfy --version latest
-autodl start
-```
-
-`comfy update` 会更新 ComfyUI 及其 Python 依赖，但不会更新 Torch。升级后再次执行普通 `autodl setup` 不会自动降级 ComfyUI。需要回到项目验证版本时执行：
-
-```bash
-comfy --workspace /root/ComfyUI update comfy --version 0.36.0
-```
-
-手动升级属于用户选择的本机状态；升级自定义节点前建议保留工作流和节点快照。
-
-## 新实例恢复
-
-本项目不会把数据同步到 Git。换一台 AutoDL 实例时：
-
-1. 确认原数据盘仍挂载在 `/root/autodl-tmp`，或先自行恢复数据盘备份。
-2. 重新安装 `uv` 和 `autodl-instance`。
-3. 重新执行 `autodl init`，并重新录入本机 secrets。
-4. 执行 `autodl setup` 重建系统盘上的 ComfyUI，并重新连接已有数据。
-5. 执行 `autodl doctor` 检查目录、模型和网络状态。
-
-`/root/autodl-tmp` 中的数据不是远程备份。释放数据盘或删除其中内容后，本工具无法恢复。
-
-## 是否需要 clone 仓库
-
-普通使用不需要 clone。只有要修改代码、运行测试或参与开发时，才建议把源码 clone 到数据盘，避免工作副本随系统盘重建而丢失：
-
-```bash
-cd /root/autodl-tmp
-git clone <repository-url> autodl-instance
-cd autodl-instance
-uv tool install --editable .
-autodl --help
-```
-
-开发和测试说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 常用命令
-
-| 命令 | 功能 |
-|------|------|
-| `autodl init` | 写入默认或指定的本机路径配置 |
-| `autodl config show` | 查看本机配置 |
-| `autodl setup` | 初始化网络、PyTorch、ComfyUI、工作区和节点 |
-| `autodl start` | 在 6006 端口前台启动 ComfyUI |
-| `autodl stop` | 停止 ComfyUI 和代理，并尝试保存节点快照 |
-| `autodl status` | 快速检查工作区、ComfyUI 和模型状态 |
-| `autodl doctor` | 深度检查配置、网络、磁盘和缓存 |
-| `autodl model ...` | 下载和检查模型 |
-| `source turbo` | 把当前网络配置注入当前 shell |
-
-更新 GitHub 版本：
-
-```bash
-uv tool install --force "git+https://github.com/Sinyuk7/autodl-instance.git@main"
-```
+开发约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。历史设计和 review 材料位于 `docs/archive/`，它们不是当前行为的权威来源。
 
 ## License
 

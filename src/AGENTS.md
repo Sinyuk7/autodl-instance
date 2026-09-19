@@ -6,8 +6,10 @@
 
 ```
 src/
-├── main.py          # CLI entry & pipeline orchestration
-├── addons/          # 7 lifecycle plugins
+├── cli.py           # Unified autodl command dispatch
+├── main.py          # Lifecycle pipeline orchestration
+├── status.py        # Read-only status and doctor checks
+├── addons/          # Lifecycle plugins
 ├── core/            # Abstract base classes, ports, adapters
 └── lib/             # Reusable libraries (download, network)
 ```
@@ -19,7 +21,8 @@ src/
 | Add plugin to pipeline | `main.py:create_pipeline()` - append to list |
 | Change plugin order | `main.py:create_pipeline()` - reorder list |
 | Access manifest config | `main.py:load_manifests()` or `addon.get_manifest(ctx)` |
-| CLI argument parsing | `main.py:main()` - argparse setup |
+| CLI argument parsing | `cli.py:build_parser()` and the delegated entry point |
+| Add read-only diagnostics | `status.py` - must not initialize networking |
 | Context creation | `main.py:create_context()` |
 
 ## PLUGIN PIPELINE
@@ -37,5 +40,7 @@ Hardcoded execution order (setup):
 
 - Plugins are classes in `addons/{name}/plugin.py`
 - Must inherit `BaseAddon` from `core.interface`
-- Must implement `setup()`, `start()`, `stop()` methods
+- Implement only the `setup()`, `start()`, and `stop()` hooks the plugin owns
 - Plugin name = directory name (accessed via `self.name`)
+- Do not make inspection commands depend on a healthy lifecycle pipeline
+- The missing `addons/torch_engine/plugin.py` currently prevents lifecycle imports; preserve this as an explicit known failure until it is repaired and tested

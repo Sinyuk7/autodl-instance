@@ -8,9 +8,10 @@
 2. **Python 环境**: 预装 Miniconda，默认 Python 3.x (通常 3.11)。支持 `conda` 切换环境。
 3. **驱动与框架**: 预装 NVIDIA Driver、CUDA Toolkit 及 PyTorch/TF 等框架。**无需**在脚本中重新安装底层驱动。
 4. **存储结构**: 
-   - 系统盘 (`/root`): 容量小，重置会清空。
-   - 数据盘 (`/root/autodl-tmp`): 容量大。**高频缓存和项目工作区必须放在数据盘**。
-5. **网络与工具**: 支持 SSH/JupyterLab。内置"学术加速"，由 `src/lib/network.py` 统一管理（代理、HF 镜像、API Token），所有 Python 入口通过 `setup_network()` 初始化，用户终端可通过 `eval $(turbo)` 注入。
+   - 系统盘 (`/root`): 容量较小，系统重置会清空。源码工作副本放在 `/root/autodl-instance`，环境应可重建。
+   - 数据盘 (`/root/autodl-tmp`): 用于模型、用户数据、输出和大型缓存；写入前必须确认它是真实挂载点。
+   - 文件存储 (`/root/autodl-fs`): 用于压缩备份，不用于活跃工作负载。
+5. **网络与工具**: 支持 SSH/JupyterLab。网络模块管理 AutoDL 学术加速、Mihomo、镜像和 Token。只读入口不得隐式调用 `setup_network()`；不要把 `eval "$(autodl turbo)"` 当作启动代理的必要步骤，优先使用独立代理进程和命令级环境变量。
 6. **开放端口**: 由于实例无独立公网IP，因此不能开放任意端口。但是 AutoDL 为每个实例的 6006 和 6008 端口都映射了一个可公网访问的地址，也就是将实例中的 6006 和 6008 端口映射到公网可供访问的 ip:port 上，映射的协议支持 TCP 或 HTTP，协议可自行选择，ip:port 可在「自定义服务」入口获取。
 
 ---
@@ -21,9 +22,9 @@
 2. **友好错误提示**: 封装统一的命令执行函数 (`src.core.utils.run_command`)，拦截 Python 堆栈，输出小白友好的中文提示。
 3. **结构化日志**: 引入日志文件记录 (`src.core.utils.logger`)，便于排查断网或清屏后的问题。终端输出 INFO 级别，文件输出 DEBUG 级别。
 4. **状态持久化**: 使用统一的 `StateManager` (`src.core.utils.StateManager`) 记录长耗时任务的安装进度，防止"半安装"状态。
-5. **进程与端口清理**: 
-   - 处理 `Ctrl+Z` 挂起残留：使用 `kill_process_by_name` 清理僵尸进程。
-   - 处理 `Ctrl+C` 异常退出：服务启动前使用 `release_port` 释放端口，避免 "address already in use" 错误。
+5. **进程与端口清理**:
+   - 必须通过 PID 文件、命令行和工作目录确认进程归属。
+   - 优先发送 `SIGTERM` 并等待退出；不得为了释放 6006 杀死未知进程。
 
 ---
 

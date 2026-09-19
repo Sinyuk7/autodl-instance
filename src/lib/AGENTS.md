@@ -7,14 +7,8 @@
 ```
 lib/
 ├── download/       # Multi-strategy downloaders
-│   ├── __init__.py
-│   ├── hf_hub.py   # HuggingFace hub downloads
-│   ├── aria2.py    # aria2c multi-threaded
-│   └── manifest.yaml
-├── network/        # Proxy & network config
-│   ├── __init__.py
-│   ├── proxy.py    # Mihomo proxy management
-│   └── manifest.yaml
+├── network/        # Network decision, mirrors, proxy backends and state
+│   └── proxy/      # Mihomo install/config/process management
 ├── ui.py           # Terminal UI utilities
 └── utils.py        # General utilities
 ```
@@ -37,20 +31,20 @@ lib/
 
 ## NETWORK MANAGEMENT
 
-**`network/proxy.py`:**
+**`network/` and `network/proxy/`:**
 - Mihomo (Clash) proxy setup
 - AutoDL academic acceleration
 - GitHub/HuggingFace mirror config
 - API token injection
 
-**Entry point:** `setup_network()` - must run before any network operation
+**Mutation boundary:** `setup_network()` may install/start a proxy and modify the current process environment. Do not call it from `status`, `doctor`, `stop`, imports, or other read-only paths.
 
 ## WHERE TO LOOK
 
 | Task | Location |
 |------|----------|
 | Add download source | `download/` - New strategy class |
-| Modify proxy behavior | `network/proxy.py` |
+| Modify proxy behavior | `network/manager.py` and `network/proxy/` |
 | Add UI prompt | `ui.py` - Rich/prompt_toolkit helpers |
 | Utility functions | `utils.py` |
 
@@ -63,6 +57,8 @@ lib/
 - Handle auth via `secrets.yaml` (not params)
 
 **Network:**
-- `setup_network()` is idempotent (safe to call multiple times)
-- Caches config to avoid re-initialization
-- Use `invalidate_network_cache()` to force reload
+- Treat `direct`, `turbo`, `mihomo`, and `unavailable` as distinct observable outcomes
+- Start Mihomo independently from exporting proxy variables into a shell
+- Prefer per-command proxy variables; local checks must bypass proxies explicitly
+- Cache decisions only after validating the selected backend
+- Never log subscription URLs, nodes, tokens, or raw private configuration
