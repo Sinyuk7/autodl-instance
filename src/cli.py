@@ -51,7 +51,7 @@ def _format_yaml(data: dict) -> str:
 
 
 def _normalize_config_value(key: str, value: str) -> str:
-    if key in PATH_CONFIG_KEYS:
+    if key in PATH_CONFIG_KEYS or key in {"local_models_dir", "model_presets_dir"}:
         return os.path.abspath(os.path.expandvars(os.path.expanduser(value)))
     return value
 
@@ -91,7 +91,7 @@ def _write_init_config(args: argparse.Namespace) -> None:
             effective[key] = _normalize_config_value(key, override)
     from src.lib.migration import MigrationManager
     layout = MigrationManager(Path(effective["comfy_dir"]), Path(effective["models_dir"]),
-                        Path(effective["output_dir"]), Path(effective["workspace_data_dir"]) / "user")
+                        Path(effective["output_dir"]), Path(effective["workspace_data_dir"]) / "user", manage_models=False)
     layout.validate()
     paths = [Path(effective[key]) for key in PATH_CONFIG_KEYS]
     require_managed_storage_mount(*paths)
@@ -103,6 +103,12 @@ def _write_init_config(args: argparse.Namespace) -> None:
     layout.initialize()
     if load_yaml(args.config_file) != data:
         _save_local_yaml(args.config_file, data)
+    from src.addons.models.preset.environment import Settings, configure
+    settings = Settings.load(args.config_file)
+    require_managed_storage_mount(settings.source, settings.root)
+    settings.root.mkdir(parents=True, exist_ok=True)
+    if (settings.comfy / "main.py").is_file():
+        configure(settings)
     print(f"配置已就绪: {args.config_file}")
 
 
@@ -269,12 +275,15 @@ def build_parser() -> argparse.ArgumentParser:
     for action in ("setup", "start", "stop"):
         p = sub.add_parser(action, help=f"run {action} lifecycle")
         p.add_argument("--debug", action="store_true")
+        if action == "start":
+            p.add_argument("--vram-mode", choices=["high", "normal"],
+                           help="显存模式（默认 high；normal 用于对照测试）")
 
     sub.add_parser("status", help="quick read-only status")
     sub.add_parser("doctor", help="deep read-only diagnostics")
     sub.add_parser("turbo", help="print shell exports for network env")
 
-    model = sub.add_parser("model", help="model management", add_help=False)
+    model = sub.add_parser("model", aliases=["models"], help="model management (including preset copying)", add_help=False)
     model.add_argument("model_args", nargs=argparse.REMAINDER)
 
     return parser
@@ -283,8 +292,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     if argv is None:
         argv = sys.argv[1:]
-    if argv and argv[0] == "model":
-        _dispatch_model(argv[1:])
+    if argv and argv[0] in ("model", "models"):
+        if len(argv) > 1 and argv[1] == "preset":
+            from src.addons.models.preset.cli import main as preset_main
+            preset_main(argv[2:])
+        else:
+            _dispatch_model(argv[1:])
         return
 
     parser = build_parser()
@@ -298,7 +311,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         from src.lib.migration import MigrationManager
         runtime = resolve_runtime_config(_code_root(), config_file=args.config_file)
         MigrationManager(runtime.comfy_dir, runtime.models_dir, runtime.output_dir,
-                   runtime.workspace_data_dir / "user").migrate()
+                   runtime.workspace_data_dir / "user", manage_models=False).migrate()
         print("数据迁移与链接处理完成；跳过项请查看警告。")
         return
 
@@ -314,6 +327,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         lifecycle_args = []
         if args.debug:
             lifecycle_args.append("--debug")
+        if args.command == "start" and args.vram_mode:
+            lifecycle_args.extend(["--vram-mode", args.vram_mode])
         _dispatch_lifecycle(args.command, lifecycle_args)
         return
 

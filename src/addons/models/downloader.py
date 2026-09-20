@@ -27,7 +27,7 @@ from src.lib.utils import load_yaml, format_size
 # 导入本地模块
 from src.addons.models.config import (
     PRESETS_FILE,
-    get_downloads_base,
+    get_local_models_base,
     get_models_base,
     get_available_types,
     resolve_type_to_dir,
@@ -81,41 +81,24 @@ def _report_preflight(label: str, result: PreflightResult) -> bool:
 # ============================================================
 def cmd_list() -> None:
     """列出已下载模型 (使用 Rich 美化)"""
-    base = get_models_base()
-    ui.print_panel("模型目录", str(base))
-    
-    if not base.exists():
-        ui.print_warning("目录不存在")
-        return
-    
-    # 收集模型文件 (排除法: 跳过隐藏文件和已知非模型扩展名)
+    roots = [("tmp", get_local_models_base()), ("fs", get_models_base())]
     from src.addons.models.lock import EXCLUDED_EXTENSIONS
-    model_files: List[Path] = []
-    for f in base.rglob("*"):
-        if not f.is_file():
+    rows = []
+    for label, base in roots:
+        ui.print_info(f"{label}: {base}")
+        if not base.is_dir():
             continue
-        if f.name.startswith("."):
-            continue
-        if f.suffix.lower() in EXCLUDED_EXTENSIONS:
-            continue
-        model_files.append(f)
-    
-    if not model_files:
+        for f in sorted(base.rglob("*")):
+            if (not f.is_file() or any(part.startswith(".") for part in f.relative_to(base).parts)
+                    or f.suffix.lower() in EXCLUDED_EXTENSIONS | {".part", ".aria2"}
+                    or Path(str(f) + ".aria2").exists()):
+                continue
+            rows.append([label, str(f.relative_to(base)), format_size(f.stat().st_size // 1024)])
+    if not rows:
         ui.print_info("暂无模型文件")
         return
-    
-    # 按目录分组显示
-    rows: List[List[str]] = []
-    for f in sorted(model_files):
-        rel_path = f.relative_to(base)
-        size = f.stat().st_size // 1024  # KB
-        rows.append([str(rel_path), format_size(size)])
-    
-    ui.print_table(
-        title=f"模型文件 ({len(model_files)} 个)",
-        columns=["路径", "大小"],
-        rows=rows,
-    )
+    ui.print_table(title=f"模型文件 ({len(rows)} 个)", columns=["来源", "路径", "大小"], rows=rows)
+
 
 
 # ============================================================
@@ -227,10 +210,30 @@ def _write_download_meta(
     write_meta(target_path, meta)
 
 
+def download_to_models(url: str, target: Path, *, overwrite: bool = False) -> bool:
+    """Resume beside the model, then publish only a completed download."""
+    import os
+    if target.exists() and not overwrite:
+        if Path(str(target) + ".aria2").exists():
+            raise ValueError(f"Incomplete legacy download; finish or remove manually: {target}")
+        return True
+    partial = safe_target(target.parent, target.name + ".part")
+    if not core_download(url, partial):
+        return False
+    if overwrite:
+        os.replace(partial, target)
+    else:
+        try:
+            os.link(partial, target)
+        except FileExistsError:
+            pass  # A competing writer's completed file wins.
+        partial.unlink()
+    return True
+
+
 def cmd_download_interactive(url: str) -> None:
     """交互式下载单个模型"""
-    base = get_downloads_base()
-    models_base = get_models_base()
+    base = get_local_models_base()
     url_type = detect_url_type(url)
     
     # 用于存储解析结果
@@ -277,7 +280,7 @@ def cmd_download_interactive(url: str) -> None:
         filename = extract_filename_from_url(url)
         # 尝试从路径推断类型 (如 .../unet/... -> unet)
         url_lower = url.lower()
-        for known_type in ["unet", "clip", "vae", "lora", "controlnet", "checkpoints"]:
+        for known_type in ["diffusion_models", "text_encoders", "instantid", "insightface", "unet", "clip", "vae", "lora", "controlnet", "checkpoints"]:
             if f"/{known_type}/" in url_lower or f"/{known_type}s/" in url_lower:
                 suggested_type = known_type
                 break
@@ -341,6 +344,7 @@ def cmd_download_interactive(url: str) -> None:
     target_path = safe_target(base, str(Path(rel_dir) / filename))
     target_dir = target_path.parent
     
+    overwrite = False
     # ========== Step 5: 处理文件已存在 ==========
     if target_path.exists():
         ui.print_warning(f"文件已存在: {target_path}")
@@ -365,7 +369,7 @@ def cmd_download_interactive(url: str) -> None:
             target_path = safe_target(base, str(Path(rel_dir) / filename))
             if target_path.exists():
                 raise ValueError("Renamed target already exists")
-        # choice == "覆盖" 则继续
+        overwrite = choice == "覆盖"
     
     # ========== Step 6: 确认下载 ==========
     rel_path = f"{rel_dir}/{filename}"
@@ -375,8 +379,7 @@ def cmd_download_interactive(url: str) -> None:
         "下载确认",
         f"文件名: {filename}\n"
         f"目标: {target_path}\n"
-        f"相对路径: {rel_path}\n"
-        f"手动发布到: {models_base / rel_path}"
+        f"相对路径: {rel_path}"
         + (f"\n预计大小: {size_info}" if size_info else ""),
         style="green"
     )
@@ -388,7 +391,7 @@ def cmd_download_interactive(url: str) -> None:
     # ========== Step 7: 下载前预检 ==========
     preflight = prepare_download_preflight(
         download_url,
-        target_path,
+        Path(str(target_path) + ".part"),
         known_size_bytes=known_size_bytes,
     )
     if not _report_preflight(filename, preflight):
@@ -399,7 +402,7 @@ def cmd_download_interactive(url: str) -> None:
     
     ui.print_info("正在下载...")
     
-    if not core_download(download_url, target_path):
+    if not download_to_models(download_url, target_path, overwrite=overwrite):
         _print_actionable_error(
             f"下载失败: {filename}",
             "URL 失效、Token 缺失、网络/代理异常，或下载过程中磁盘空间被耗尽。",
@@ -410,8 +413,7 @@ def cmd_download_interactive(url: str) -> None:
     # ========== Step 9: 写入 .meta sidecar ==========
     _write_download_meta(target_path, url=url, source=url_type, extra_info=civitai_info)
     
-    ui.print_success(f"下载完成（暂存）: {target_path}")
-    ui.print_info(f"确认文件后手动移动到: {models_base / rel_path}")
+    ui.print_success(f"下载完成: {target_path}")
 
 
 # ============================================================
@@ -440,8 +442,7 @@ def cmd_download_preset(preset_name: str) -> None:
         sys.exit(1)
 
     preset = presets[matched_name]
-    base = get_downloads_base()
-    models_base = get_models_base()
+    base = get_local_models_base()
 
     ui.print_panel(
         f"预设: {matched_name}",
@@ -456,31 +457,26 @@ def cmd_download_preset(preset_name: str) -> None:
         name = entry.model
         rel_path = entry.primary_path
         target = safe_target(base, rel_path)
-        published = safe_target(models_base, rel_path)
-
-        # 正式目录或暂存目录中已有文件时均不重复下载。
-        if (published.exists() and not Path(str(published) + ".aria2").exists()) or (target.exists() and not Path(str(target) + ".aria2").exists()):
-            existing = published if published.exists() else target
-            ui.print_info(f"[{name}] 已存在，跳过: {existing}")
+        if target.exists() and not Path(str(target) + ".aria2").exists():
+            ui.print_info(f"[{name}] 已存在，跳过: {target}")
             skip_count += 1
             continue
 
         ui.console.print(f"\n[bold blue]>>> 下载 {name}[/bold blue]")
 
-        preflight = prepare_download_preflight(entry.url, target)
+        preflight = prepare_download_preflight(entry.url, Path(str(target) + ".part"))
         if not _report_preflight(name, preflight):
             fail_count += 1
             continue
 
         target.parent.mkdir(parents=True, exist_ok=True)
 
-        if core_download(entry.url, target):
+        if download_to_models(entry.url, target):
             if target.exists():
                 # 写入 .meta sidecar（不动 model-lock.yaml）
                 _write_download_meta(target, url=entry.url, source="preset",
                                      model_name=name)
-                ui.print_success(f"[{name}] 下载完成（暂存）: {target}")
-                ui.print_info(f"手动发布到: {published}")
+                ui.print_success(f"[{name}] 下载完成: {target}")
                 success_count += 1
             else:
                 _print_actionable_error(
@@ -626,7 +622,7 @@ def main() -> None:
         runtime = resolve_runtime_config(Path(__file__).resolve().parents[3])
         configure_cache_environment(runtime)
         if args.cmd == "download" or args.cache_cmd == "clear":
-            require_managed_storage_mount(runtime.downloads_dir, runtime.cache_dir)
+            require_managed_storage_mount(get_local_models_base(), runtime.downloads_dir, runtime.cache_dir)
         if args.cmd == "download":
             setup_network(verbose=True)
     

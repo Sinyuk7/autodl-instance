@@ -128,7 +128,7 @@ def test_init_preserves_root_files_and_starts_proxy(tmp_path):
     assert not source.is_symlink()
 
 
-def test_migrate_cli_merges_and_links_without_network(tmp_path):
+def test_migrate_cli_preserves_models_without_network(tmp_path):
     from types import SimpleNamespace
     source = tmp_path / "ComfyUI/models/a"
     source.mkdir(parents=True)
@@ -142,8 +142,9 @@ def test_migrate_cli_merges_and_links_without_network(tmp_path):
         main(["migrate", "--config-file", str(config)])
         assert resolve.call_args.kwargs["config_file"] == config
         network.assert_not_called()
-    assert source.is_symlink()
-    assert (runtime.models_dir / "a/model.bin").read_bytes() == b"model"
+    assert not source.is_symlink()
+    assert (source / "model.bin").read_bytes() == b"model"
+    assert not (runtime.models_dir / "a/model.bin").exists()
 
 
 def test_init_environment_paths_match_runtime_without_persisting_override(tmp_path, monkeypatch):
@@ -152,7 +153,7 @@ def test_init_environment_paths_match_runtime_without_persisting_override(tmp_pa
     (tmp_path / "ComfyUI/models/a").mkdir(parents=True)
     with patch("src.lib.network.setup_network"):
         main(init_args(tmp_path))
-    assert (tmp_path / "ComfyUI/models/a").resolve() == override / "a"
+    assert not (tmp_path / "ComfyUI/models/a").is_symlink()
     assert load_yaml(tmp_path / "config.yaml")["models_dir"] == str(tmp_path / "shared/models")
 
 
@@ -161,3 +162,17 @@ def test_shared_storage_defaults_are_direct_children():
     assert DEFAULT_MODELS_DIR == Path("/root/autodl-fs/models")
     assert DEFAULT_OUTPUT_DIR == Path("/root/autodl-fs/output")
     assert DEFAULT_CACHE_DIR == Path("/root/autodl-tmp/ComfyUI/cache")
+
+
+def test_init_configures_fixed_paths_when_comfy_installed(tmp_path):
+    comfy = tmp_path / "ComfyUI"
+    comfy.mkdir()
+    (comfy / "main.py").touch()
+    with patch("src.lib.network.setup_network"):
+        main(init_args(tmp_path))
+        config = load_yaml(comfy / "extra_model_paths.yaml")
+        assert config["autodl_local_models"]["base_path"] == str(tmp_path / "local/ComfyUI/models")
+        assert config["autodl_canonical_models"]["base_path"] == str(tmp_path / "shared/models")
+        before = (comfy / "extra_model_paths.yaml").stat().st_mtime_ns
+        main(init_args(tmp_path))
+        assert (comfy / "extra_model_paths.yaml").stat().st_mtime_ns == before

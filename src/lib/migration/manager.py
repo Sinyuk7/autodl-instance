@@ -15,6 +15,7 @@ class MigrationManager:
     models_dir: Path
     output_dir: Path
     user_dir: Path
+    manage_models: bool = True
 
     @property
     def links(self) -> tuple[tuple[Path, Path], ...]:
@@ -119,7 +120,7 @@ class MigrationManager:
         if not self.comfy_dir.is_dir():
             return
         with self._locked():
-            for source, target in self.links[:2]:
+            for source, target in (self.links[:2] if self.manage_models else self.links[1:2]):
                 if source.is_symlink():
                     logger.warning("保留旧版根目录链接，未改为子目录布局: %s", source)
                     continue

@@ -194,7 +194,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AutoDL 自动化装配调度器")
     parser.add_argument("action", choices=["setup", "start", "stop"], help="生命周期动作")
     parser.add_argument("--debug", action="store_true", help="调试模式")
+    parser.add_argument("--vram-mode", choices=["high", "normal"])
     args = parser.parse_args()
+    if args.vram_mode and args.action != "start":
+        parser.error("--vram-mode 仅用于 start")
 
     # 初始化日志（必须在所有其他操作之前）
     runtime = resolve_runtime_config(Path(__file__).resolve().parent.parent)
@@ -204,6 +207,8 @@ def main() -> None:
     setup_logger(log_file, debug=args.debug)
 
     context = create_context(debug=args.debug, load_artifacts=args.action in ("start", "stop"))
+    if args.action == "start":
+        context.vram_mode = args.vram_mode
 
     # 创建上下文并执行
     # start/stop 需要加载 setup 阶段持久化的 artifacts

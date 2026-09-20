@@ -115,7 +115,14 @@ def collect_quick_checks(
         str(comfy_dir) if comfy_dir.exists() else f"目录不存在: {comfy_dir}",
     ))
 
-    if comfy_models.is_symlink() and comfy_models.resolve() == models_base.resolve():
+    from src.addons.models.preset.environment import Settings, configuration_ready
+    model_settings = Settings.load()
+    model_settings.comfy = comfy_dir
+    model_settings.source = models_base
+    if configuration_ready(model_settings):
+        checks.append(StatusCheck("model search paths", "OK",
+            f"Configured: {model_settings.root} first, {models_base} second; live priority not checked"))
+    elif comfy_models.is_symlink() and comfy_models.resolve() == models_base.resolve():
         checks.append(StatusCheck("models symlink", "OK", f"{comfy_models} -> {models_base}"))
     elif not comfy_models.is_symlink() and comfy_models.is_dir() and models_base.is_dir():
         names = {p.name for p in comfy_models.iterdir() if not p.name.startswith(".") and (p.is_dir() or p.is_symlink())}

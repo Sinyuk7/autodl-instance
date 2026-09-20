@@ -8,12 +8,6 @@
 
 Collection of inspectable diagnostics, installers, lifecycle helpers, and recovery tools for ComfyUI on AutoDL. Codex CLI is expected to inspect the real host first and maintain the tools from `/root/autodl-instance`; do not assume the full pipeline is healthy or appropriate for every repair.
 
-## ACTIVE HOST HANDOFF
-
-Before host mutations, read `docs/NEXT_SESSION_PLAN.md` before any
-host mutation. Verify all mounts again and preserve the uncommitted working
-tree; do not run lifecycle setup/start/stop commands merely to probe state.
-
 ## STRUCTURE
 
 ```
@@ -114,8 +108,16 @@ Core: `pluggy>=1.3.0`, `PyYAML>=6.0.1`, `rich>=13.0.0`, `prompt_toolkit>=3.0.0`
 - Never print or commit proxy profiles, subscription URLs, tokens, private keys, or local secrets.
 - comfy-cli manages Torch and ComfyUI dependencies in `/root/.venvs/comfyui`; never fall back to base Conda or pin Torch independently.
 - CLI uses editable installation from `/root/autodl-instance`. No partial lifecycle flags or generated shell aliases.
-- `init` prepares missing directories, safe data links and networking each boot; `migrate` explicitly merges conflicting subdirectories and links them; `setup` only installs programs/dependencies. Model help/list/status/types must remain read-only.
+- `init` prepares missing directories, fixed tmp/fs model paths, safe output/user links and networking each boot; `migrate` only merges output/user data; `setup` only installs programs/dependencies. Model help/list/status/types must remain read-only.
 - Output defaults to `/root/autodl-fs/output`; downloads/cache/temp use `/root/autodl-tmp/ComfyUI`.
 - Proxy profiles belong in `~/.config/autodl-instance/mihomo` on the system disk.
 
-- Shared migration module: `src/lib/migration`. init handles unambiguous child-directory moves/links; migrate allows explicit conflict merging. models/output roots remain physical directories and their regular files are never migrated.
+- Shared migration module: `src/lib/migration`. init handles unambiguous output/user moves/links; migrate allows explicit conflict merging there. Model files are never moved by init/migrate.
+
+
+## Model directory policy (current)
+
+- Models use `/root/autodl-tmp/ComfyUI/models` first and `/root/autodl-fs/models` second via fixed ComfyUI extra_model_paths.yaml blocks.
+- `init/migrate` must not migrate model files or create fs category links; their output/user migration behavior remains.
+- Presets only copy missing fs files into tmp at the same relative path. Existing files are skipped, never overwritten or automatically deleted. There is no active preset, cache ownership, eviction, or reset.
+- Downloads write beside their final model as `.part` and publish on success. Do not introduce a second hidden model root or route new model downloads into a separate staging tree.

@@ -114,6 +114,16 @@ class ComfyAddon(BaseAddon):
             logger.info("  -> ComfyUI 核心引擎装配完成！")
             self.log(ctx, "setup", "installed")
         
+        # First installation follows init; write the fixed model paths now if
+        # init ran before the ComfyUI checkout existed.
+        if (comfy_dir / "main.py").is_file():
+            from src.addons.models.preset.environment import Settings, configure
+            from src.core.runtime import DEFAULT_CONFIG_FILE
+            settings = Settings.load(ctx.config_file or DEFAULT_CONFIG_FILE)
+            settings.comfy = comfy_dir
+            settings.source = ctx.models_dir
+            configure(settings)
+
         # 产出：供后续插件使用
         ctx.artifacts.comfy_dir = comfy_dir
         ctx.artifacts.user_dir = comfy_dir / "user"
@@ -127,6 +137,10 @@ class ComfyAddon(BaseAddon):
         
         comfy_dir = ctx.artifacts.comfy_dir or self._get_comfy_dir(ctx)
         port = self.DEFAULT_PORT
+        vram_mode = ctx.vram_mode or self.get_manifest(ctx).get("vram_mode", "high")
+        if vram_mode not in ("high", "normal"):
+            raise ValueError(f"Invalid ComfyUI vram_mode: {vram_mode}")
+        vram_args = ["--highvram"] if vram_mode == "high" else []
 
         try:
             from src.status import collect_quick_checks
@@ -150,6 +164,7 @@ class ComfyAddon(BaseAddon):
         
         logger.info(f"  -> ComfyUI 目录: {comfy_dir}")
         logger.info(f"  -> 监听端口: {port}")
+        logger.info(f"  -> 显存模式: {vram_mode}")
         
         try:
             ctx.cmd.run([
@@ -158,6 +173,7 @@ class ComfyAddon(BaseAddon):
                 str(ctx.python_env_dir / 'bin/comfy'), "--workspace", str(comfy_dir), "launch",
                 "--", "--port", str(port), "--listen", "0.0.0.0",
                 "--temp-directory", str(ctx.temp_dir),
+                *vram_args,
             ], check=True, capture_output=False)
         except KeyboardInterrupt:
             logger.info("\n  -> 服务已安全关闭。")
@@ -165,9 +181,11 @@ class ComfyAddon(BaseAddon):
     @hookimpl
     def stop(self, context: AppContext) -> PluginResult:
         comfy_dir = context.artifacts.comfy_dir or self._get_comfy_dir(context)
-        stopped = stop_owned_comfy_listener(self.DEFAULT_PORT, comfy_dir)
+        stopped = stop_owned_comfy_listener(
+            self.DEFAULT_PORT, comfy_dir, context.python_env_dir
+        )
         if not stopped:
-            return PluginResult.skipped("ComfyUI 未监听 6006")
+            return PluginResult.skipped("ComfyUI 未监听 6006 或已退出")
         return PluginResult.success(
-            f"已向确认归属的 ComfyUI PID 发送 SIGTERM: {stopped}"
+            f"已发送 SIGTERM 并确认 ComfyUI 退出，PID: {stopped}"
         )

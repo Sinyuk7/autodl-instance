@@ -40,6 +40,7 @@ class AppContext:
     
     # === 运行时参数 ===
     debug: bool = False
+    vram_mode: Optional[str] = None
     
     # === 执行追踪（用于调试和测试）===
     execution_log: List[str] = field(default_factory=lambda: [])

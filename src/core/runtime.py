@@ -43,6 +43,9 @@ CONFIG_KEY_ALIASES = {
     "cache-dir": "cache_dir",
     "temp-dir": "temp_dir",
     "python-env-dir": "python_env_dir",
+    "local-models-dir": "local_models_dir",
+    "model-presets-dir": "model_presets_dir",
+    "model-port": "model_port",
 }
 
 SECRET_KEY_ALIASES = {

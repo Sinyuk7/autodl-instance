@@ -87,7 +87,7 @@ def test_preset_resumes_partial_and_reports_failure(tmp_path, monkeypatch):
     from src.addons.models import downloader
     from src.addons.models.schema import PresetsFile
     from types import SimpleNamespace
-    target = tmp_path / 'downloads' / 'model.bin'
+    target = tmp_path / 'models' / 'model.bin.part'
     target.parent.mkdir()
     target.write_bytes(b'partial')
     Path(str(target) + '.aria2').touch()
@@ -95,7 +95,7 @@ def test_preset_resumes_partial_and_reports_failure(tmp_path, monkeypatch):
         {'model': 'test', 'url': 'https://example.com/model.bin', 'paths': [{'path': 'model.bin'}]}
     ]}}})
     monkeypatch.setattr(downloader, 'load_presets', lambda: preset)
-    monkeypatch.setattr(downloader, 'get_downloads_base', lambda: target.parent)
+    monkeypatch.setattr(downloader, 'get_local_models_base', lambda: target.parent)
     monkeypatch.setattr(downloader, 'get_models_base', lambda: tmp_path / 'models')
     monkeypatch.setattr(downloader, 'prepare_download_preflight', lambda *a: SimpleNamespace(ok=True))
     monkeypatch.setattr(downloader, '_report_preflight', lambda *a: True)

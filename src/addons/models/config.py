@@ -85,10 +85,9 @@ def get_available_types() -> List[str]:
     Returns:
         模型目录下的子目录名列表，如 ["checkpoints", "loras", "LLM", ...]
     """
-    base = get_models_base()
-    if not base.exists():
-        return []
-    return sorted([d.name for d in base.iterdir() if d.is_dir() and not d.name.startswith(".")])
+    return sorted({d.name for base in (get_models_base(), get_local_models_base())
+                   if base.is_dir() for d in base.iterdir()
+                   if d.is_dir() and not d.name.startswith(".")})
 
 
 def resolve_type_to_dir(type_or_path: str) -> str:
@@ -104,3 +103,9 @@ def resolve_type_to_dir(type_or_path: str) -> str:
         原样返回输入路径
     """
     return type_or_path
+
+
+def get_local_models_base() -> Path:
+    """The same local model root used by presets and ComfyUI search paths."""
+    from .preset.environment import Settings
+    return Settings.load().root

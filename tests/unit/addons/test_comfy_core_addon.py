@@ -113,7 +113,15 @@ class TestStart:
 
         mock_check.assert_called_with(6006)
         # 验证调用了启动命令
-        assert any("launch" in cmd for cmd in mock_runner.all_commands)
+        assert any("launch" in cmd and "--highvram" in cmd for cmd in mock_runner.all_commands)
+
+    def test_normal_mode_uses_comfy_default(self, app_context, mock_runner):
+        app_context.vram_mode = "normal"
+        with patch("src.addons.comfy_core.plugin.ensure_port_available"):
+            ComfyAddon().start(app_context)
+        launch = next(cmd for cmd in mock_runner.all_commands if "launch" in cmd)
+        assert "--highvram" not in launch
+        assert "--normalvram" not in launch
 
     def test_handles_keyboard_interrupt(self, app_context: AppContext, mock_runner):
         """中断处理：KeyboardInterrupt 不应抛出异常"""
@@ -138,5 +146,7 @@ class TestStop:
         ) as mock_stop:
             result = addon.stop(app_context)
 
-        mock_stop.assert_called_once_with(6006, app_context.comfy_dir)
+        mock_stop.assert_called_once_with(
+            6006, app_context.comfy_dir, app_context.python_env_dir
+        )
         assert result.status == "success"
