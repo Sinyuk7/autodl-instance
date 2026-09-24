@@ -2,7 +2,8 @@
 from src.main import execute
 
 
-def test_full_setup_installs_without_migrating_or_linking_storage(context_with_home):
+def test_full_setup_installs_without_migrating_or_linking_storage(context_with_home, monkeypatch):
+    monkeypatch.setattr("src.lib.network.setup_network", lambda **kwargs: None)
     ctx = context_with_home
     (ctx.comfy_dir / "models").mkdir()
     (ctx.comfy_dir / "models" / "example.bin").write_bytes(b"model")

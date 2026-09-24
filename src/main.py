@@ -157,6 +157,10 @@ def execute(
     """
     pipeline = create_pipeline()
     result = PipelineResult(action=action)
+
+    if action in ("setup", "start"):
+        from src.lib.network import setup_network
+        setup_network(config_file=context.config_file)
     
     # 正常顺序执行
     logger.info(f"\n>>> 开始执行 Pipeline: [{action.upper()}]")

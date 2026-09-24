@@ -193,6 +193,7 @@ class Aria2Strategy(DownloadStrategy):
         # 生命周期由 Manager 统一编排，这里只做纯下载
         cmd: list[str] = [
             "aria2c",
+            "--no-conf=true",  # The project owns proxy/retry settings, not ~/.aria2/aria2.conf.
             # === 连接与分片 ===
             "--max-connection-per-server", str(self._connections),
             "--split",                     str(self._connections),

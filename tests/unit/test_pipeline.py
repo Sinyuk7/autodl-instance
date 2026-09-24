@@ -9,6 +9,12 @@ from src.core.results import PluginResult
 PLUGIN_NAMES = ["system", "comfy_core"]
 
 
+@pytest.fixture(autouse=True)
+def mock_network():
+    with patch("src.lib.network.setup_network") as network:
+        yield network
+
+
 def test_create_pipeline_returns_current_order():
     assert [addon.name for addon in create_pipeline()] == PLUGIN_NAMES
 

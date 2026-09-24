@@ -171,7 +171,7 @@ def test_execute_saves_artifacts_to_workspace(app_context: AppContext, tmp_path:
     app_context.workspace_dir = tmp_path / "workspace"
     app_context.artifacts.proxy_url = "http://127.0.0.1:7890"
 
-    with patch("src.main.create_pipeline", return_value=[]):
+    with patch("src.main.create_pipeline", return_value=[]), patch("src.lib.network.setup_network"):
         execute("setup", app_context)
 
     assert (app_context.workspace_dir / ARTIFACTS_FILENAME).exists()
@@ -201,6 +201,7 @@ class TestMain:
         })()
         with patch("src.main.resolve_runtime_config", return_value=runtime), \
              patch("src.main.setup_logger"), \
+             patch("src.main.stop_proxy"), \
              patch("src.lib.network.setup_network"), \
              patch("src.main.create_context") as mock_ctx, \
              patch("src.main.execute") as mock_exec:

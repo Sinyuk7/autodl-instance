@@ -123,6 +123,8 @@ class DownloadManager:
             True 成功，False 失败
         """
         if not dry_run:
+            from src.lib.network import setup_network
+            setup_network()
             self._ensure_tools()
         strategy = self.get_strategy(url)
         logger.info(f"  -> 使用策略: {strategy.name}")

@@ -10,7 +10,7 @@ NetworkManager - 网络环境核心编排器
   3. 都没有 → 无代理模式
 
 配置持久化:
-  mihomo 配置通过本地 ~/.config/autodl-instance/mihomo/ 目录持久化到数据盘。
+  mihomo 配置通过本地 ~/.config/autodl-instance/mihomo/ 目录持久化到系统盘。
 """
 import logging
 import os
@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from src.lib.network.config import EXPORT_KEYS
+from src.lib.network.policy import (PROXY_KEYS, read_mode, clear_proxy_environment, proxy_environment, shell_environment)
 from src.lib.network.turbo import load_autodl_turbo
 from src.lib.network.mirror import load_hf_mirror
 from src.lib.network.token import load_api_tokens
@@ -104,24 +104,18 @@ def _build_proxy_config(config_file: Path = DEFAULT_CONFIG_FILE) -> Optional[Pro
 
 def _inject_proxy_env(proxy_url: str) -> None:
     """将代理地址注入到当前进程环境变量"""
-    os.environ["http_proxy"] = proxy_url
-    os.environ["https_proxy"] = proxy_url
-    os.environ["HTTP_PROXY"] = proxy_url
-    os.environ["HTTPS_PROXY"] = proxy_url
+    os.environ.update(proxy_environment(proxy_url))
+    logger.info("  -> ✓ 当前进程及后续子进程已配置 Mihomo 代理")
 
-    # AutoDL 内网和 localhost 不走代理
-    no_proxy = "localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-    os.environ["no_proxy"] = no_proxy
-    os.environ["NO_PROXY"] = no_proxy
-
-    logger.info(f"  -> ✓ 代理环境变量已注入: {proxy_url}")
 
 
 class NetworkManager:
     """网络环境管理器"""
 
-    def __init__(self, config_file: Path = DEFAULT_CONFIG_FILE) -> None:
+    def __init__(self, config_file: Path = DEFAULT_CONFIG_FILE, *, proxy_mode: Optional[str] = None) -> None:
         self._config_file = config_file
+        self._mode_override = proxy_mode
+        self._last_mode: Optional[str] = None
         self._initialized = False
         self._backend: Optional[MihomoBackend] = None
 
@@ -131,7 +125,8 @@ class NetworkManager:
         Args:
             verbose: 是否输出日志，独立脚本可设为 False
         """
-        if self._initialized:
+        mode = self._mode_override or read_mode(self._config_file)
+        if self._initialized and self._last_mode == mode:
             return
 
         if verbose:
@@ -147,15 +142,31 @@ class NetworkManager:
         load_api_tokens(verbose)
 
         self._initialized = True
+        self._last_mode = mode
+
+    def _fallback_proxy(self, verbose: bool) -> None:
+        if (self._mode_override or read_mode(self._config_file)) == "on":
+            clear_proxy_environment()
+            raise RuntimeError("Mihomo 不可用；代理开关为 on，拒绝静默回退。请检查 autodl proxy status。")
+        load_autodl_turbo(verbose)
+        cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
 
     def _setup_proxy(self, verbose: bool) -> None:
         """Reuse a healthy owned proxy; otherwise initialize the configured backend."""
+        mode = self._mode_override or read_mode(self._config_file)
+        if mode == "off":
+            clear_proxy_environment()
+            cache_network_decision("direct")
+            if verbose:
+                logger.info("  -> 代理已关闭：直连，不加载 AutoDL 学术加速")
+            return
+        if mode == "on":
+            clear_proxy_environment()
         config = _build_proxy_config(self._config_file)
 
         if config is None:
             # 没有配置 mihomo，用 turbo 兜底
-            load_autodl_turbo(verbose)
-            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
+            self._fallback_proxy(verbose)
             return
 
         if verbose:
@@ -174,33 +185,27 @@ class NetworkManager:
         # 安装内核
         if not backend.install():
             if verbose:
-                logger.warning("  -> [WARN] mihomo 安装失败，回退到 AutoDL 学术加速")
-            load_autodl_turbo(verbose)
-            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
+                logger.warning("  -> [WARN] mihomo 安装失败，按代理开关处理失败")
+            self._fallback_proxy(verbose)
             return
 
-        # 订阅更新 — 利用失败缓存避免重复尝试
-        if is_subscription_recently_failed():
-            if verbose:
-                logger.info("  -> 订阅近期更新失败，跳过重试 (30 分钟内自动重置)")
-            # 检查是否有可用的本地配置可以继续
-            config_file = config.config_dir / "config.yaml"
-            if not (config_file.exists() and config_file.stat().st_size > 100):
-                if verbose:
-                    logger.warning("  -> [WARN] 无可用本地配置，回退到 AutoDL 学术加速")
-                load_autodl_turbo(verbose)
-                cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
-                return
-            # 有本地配置，修补后继续启动 mihomo
+        # Starting a saved environment must not depend on the subscription server.
+        local_config = config.config_dir / "config.yaml"
+        if local_config.exists() and local_config.stat().st_size > 100:
             from src.lib.network.proxy.config import patch_config
-            patch_config(config, config_file)
+            patch_config(config, local_config)
+        # Only bootstrap from the subscription when no usable saved profile exists.
+        elif is_subscription_recently_failed():
+            if verbose:
+                logger.warning("  -> 无本地配置且订阅近期失败，跳过重试 (30 分钟内自动重置)")
+            self._fallback_proxy(verbose)
+            return
         elif not backend.update_subscription():
             # 订阅更新首次失败，写入失败标记
             mark_subscription_failed()
             if verbose:
-                logger.warning("  -> [WARN] 订阅更新失败，回退到 AutoDL 学术加速")
-            load_autodl_turbo(verbose)
-            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
+                logger.warning("  -> [WARN] 订阅更新失败，按代理开关处理失败")
+            self._fallback_proxy(verbose)
             return
         else:
             # 订阅更新成功，清除失败标记
@@ -209,18 +214,16 @@ class NetworkManager:
         # 启动代理
         if not backend.start():
             if verbose:
-                logger.warning("  -> [WARN] mihomo 启动失败，回退到 AutoDL 学术加速")
-            load_autodl_turbo(verbose)
-            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
+                logger.warning("  -> [WARN] mihomo 启动失败，按代理开关处理失败")
+            self._fallback_proxy(verbose)
             return
 
         # 健康检查
         if not backend.health_check():
             if verbose:
-                logger.warning("  -> [WARN] mihomo 连通性测试失败，停止进程并回退到 AutoDL 学术加速")
+                logger.warning("  -> [WARN] mihomo 连通性测试失败，停止进程并按代理开关处理失败")
             backend.stop()
-            load_autodl_turbo(verbose)
-            cache_network_decision("turbo" if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") else "direct")
+            self._fallback_proxy(verbose)
             return
         if verbose:
             logger.info("  -> ✓ mihomo 代理连通性测试通过")
@@ -274,15 +277,12 @@ def stop_proxy() -> None:
 
 
 def export_env_shell() -> str:
-    """执行 setup_network() 后，输出所有网络相关环境变量的 export 语句。
-
-    供 bin/turbo 使用: eval $(python -m src.lib.network)
-    这样 network 模块就是 bash 和 Python 两个世界的唯一真相来源。
-    """
+    """Legacy turbo: initialize networking, export only proxy variables (no tokens)."""
     setup_network(verbose=False)
 
-    lines: List[str] = []
-    for key in EXPORT_KEYS:
+    mode = read_mode()
+    lines: List[str] = [shell_environment()] if mode != "auto" else []
+    for key in PROXY_KEYS if mode == "auto" else ():
         value = os.environ.get(key)
         if value:
             # 转义单引号，防止注入

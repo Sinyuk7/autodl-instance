@@ -31,6 +31,7 @@ exclude = [
   "src/**/*.pyc",
 ]
 artifacts = [
+  "src/lib/network/shell.bash",
   "src/addons/*/manifest.yaml",
   "src/addons/*/manifest.yaml.example",
   "src/lib/*/manifest.yaml",

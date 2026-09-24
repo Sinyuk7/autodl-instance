@@ -11,6 +11,12 @@ from src.lib.download.manager import DownloadManager
 from src.lib.download.base import DownloadStrategy
 
 
+@pytest.fixture(autouse=True)
+def mock_network():
+    with patch("src.lib.network.setup_network") as network:
+        yield network
+
+
 class TestStrategySelection:
     """策略选择逻辑测试 - 所有 URL 统一使用 aria2"""
     

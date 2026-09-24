@@ -229,6 +229,7 @@ def _dispatch_turbo() -> None:
     output = export_env_shell()
     if output:
         print(output)
+    print("turbo 输出 shell 设置；统一开关请使用 autodl proxy on/off/status。", file=sys.stderr)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -282,6 +283,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="quick read-only status")
     sub.add_parser("doctor", help="deep read-only diagnostics")
     sub.add_parser("turbo", help="print shell exports for network env")
+    proxy = sub.add_parser("proxy", help="统一代理开关（ComfyUI、下载、Git、Bash）")
+    proxy.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
+    proxy.add_argument("proxy_command", choices=["on", "off", "status", "env", "install-git", "install-shell"])
 
     model = sub.add_parser("model", aliases=["models"], help="model management (including preset copying)", add_help=False)
     model.add_argument("model_args", nargs=argparse.REMAINDER)
@@ -338,6 +342,14 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if args.command == "turbo":
         _dispatch_turbo()
+        return
+
+    if args.command == "proxy":
+        from src.lib.network.commands import dispatch
+        try:
+            dispatch(args)
+        except (OSError, ValueError, RuntimeError) as error:
+            parser.exit(1, f"代理操作失败: {error}\n")
         return
 
     if args.command == "model":
