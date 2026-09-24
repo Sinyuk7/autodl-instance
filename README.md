@@ -56,6 +56,7 @@ autodl stop       # 停止确认归属的 ComfyUI 和代理进程
 autodl proxy on             # 启动/复用 Mihomo，通过连通性检查后保存开启状态
 autodl proxy off            # 保存关闭状态；后续项目命令直连，不回退学术加速
 autodl proxy status         # 只读查看开关、进程、端口、调用环境与 Git 集成
+autodl proxy                # 同 status，不改变开关
 ```
 
 首次接入 Git 和 Bash（显式修改个人配置，已有配置会保留/备份）：

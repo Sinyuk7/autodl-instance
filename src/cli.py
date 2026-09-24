@@ -285,7 +285,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("turbo", help="print shell exports for network env")
     proxy = sub.add_parser("proxy", help="统一代理开关（ComfyUI、下载、Git、Bash）")
     proxy.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG_FILE)
-    proxy.add_argument("proxy_command", choices=["on", "off", "status", "env", "install-git", "install-shell"])
+    proxy.add_argument("proxy_command", nargs="?", default="status",
+                       choices=["on", "off", "status", "env", "install-git", "install-shell"])
 
     model = sub.add_parser("model", aliases=["models"], help="model management (including preset copying)", add_help=False)
     model.add_argument("model_args", nargs=argparse.REMAINDER)
